@@ -1,0 +1,8 @@
+CREATE TABLE companies (
+    id BIGSERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    website TEXT,
+    logo_url TEXT,
+    created_at TIMESTAMP WITH TIMEZONE NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIMEZONE NOT NULL DEFAULT NOW()
+);

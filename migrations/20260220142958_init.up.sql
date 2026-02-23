@@ -3,8 +3,8 @@ CREATE TABLE companies (
     name TEXT NOT NULL,
     website TEXT,
     logo_url TEXT,
-    created_at TIMESTAMP WITH TIMEZONE NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIMEZONE NOT NULL DEFAULT NOW()
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE jobs (
@@ -15,13 +15,13 @@ CREATE TABLE jobs (
     location TEXT,
     url TEXT NOT NULL,
     source TEXT NOT NULL,
-    posted_at TIMESTAMP WITH TIMEZONE,
-    application_deadline TIMESTAMP WITH TIMEZONE,
+    posted_at TIMESTAMP WITH TIME ZONE,
+    application_deadline TIMESTAMP WITH TIME ZONE,
     score DOUBLE PRECISION NOT NULL DEFAULT 0,
     status TEXT NOT NULL DEFAULT 'active'
         CHECK(status IN ('active', 'archived')),
-    created_at TIMESTAMP WITH TIMEZONE NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIMEZONE NOT NULL DEFAULT NOW()
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
 
 ALTER TABLE jobs

@@ -1,4 +1,4 @@
-package models
+package jobs
 
 import "time"
 

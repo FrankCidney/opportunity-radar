@@ -1,3 +1,5 @@
+# TODO: Change the migrate commands to use code in program (i.e., write code for migrations in a ./cmd/migrations/main.go)
+
 # DB Config
 include .env
 export

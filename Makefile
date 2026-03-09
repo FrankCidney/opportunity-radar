@@ -5,20 +5,20 @@ include .env
 export
 
 # Targets
-.PHONY: migrate-up migrate-down migrate-create
+.PHONY: migrate-up migrate-down migrate-create run
 
 migrate-up:
-	migrate -path migrations -database "$(DB_URL)" up
+	migrate -path migrations -database "$(DATABASE_URL)" up
 
 migrate-down:
-	migrate -path migrations -database "$(DB_URL)" down
+	migrate -path migrations -database "$(DATABASE_URL)" down
 
 migrate-force:
 ifndef version
 	@echo "Error: version is required. Usage: make migrate-force version=XXXX"
 	@exit 1
 endif	
-	migrate -path migrations -database "$(DB_URL)" force "$(version)"
+	migrate -path migrations -database "$(DATABASE_URL)" force "$(version)"
 
 migrate-create:
 ifndef name
@@ -26,3 +26,6 @@ ifndef name
 	@exit 1
 endif
 	migrate create -ext sql -dir migrations "$(name)"
+
+run:
+	env DATABASE_URL="$(DATABASE_URL)" ENV="$(ENV)" PORT="$(PORT)" go run ./cmd/app

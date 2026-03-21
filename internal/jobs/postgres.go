@@ -13,13 +13,13 @@ import (
 )
 
 type PostgresRepository struct {
-	db *sql.DB
+	db     *sql.DB
 	logger *slog.Logger
 }
 
 func NewPostgresRepository(db *sql.DB, logger *slog.Logger) *PostgresRepository {
 	return &PostgresRepository{
-		db: db,
+		db:     db,
 		logger: logger,
 	}
 }
@@ -27,7 +27,7 @@ func NewPostgresRepository(db *sql.DB, logger *slog.Logger) *PostgresRepository 
 const (
 	pgUniqueViolation     = "23505"
 	pgForeignKeyViolation = "23503"
-	pgQueryCancelled       = "57014"
+	pgQueryCancelled      = "57014"
 )
 
 func (r *PostgresRepository) mapError(op string, err error) error {
@@ -50,8 +50,8 @@ func (r *PostgresRepository) mapError(op string, err error) error {
 		switch pqErr.Code {
 		case pgUniqueViolation:
 			// pqErr.Constraint tells you on which unique field you tried to insert
-			//  a duplicate value. Useful if a table has multiple fiels set to unique. 
-			// Log it here before discarding the raw pq.Error, 
+			//  a duplicate value. Useful if a table has multiple fiels set to unique.
+			// Log it here before discarding the raw pq.Error,
 			// since it won't propagate further.
 			r.logger.Warn("unique constraint violation",
 				"op", op,
@@ -124,7 +124,6 @@ func (r *PostgresRepository) Create(ctx context.Context, job *Job) error {
 		job.CreatedAt,
 		job.UpdatedAt,
 	).Scan(&job.ID)
-
 	if err != nil {
 		return r.mapError(op, err)
 	}
@@ -164,7 +163,6 @@ func (r *PostgresRepository) GetByID(ctx context.Context, id int64) (*Job, error
 		&job.CreatedAt,
 		&job.UpdatedAt,
 	)
-
 	if err != nil {
 		return nil, r.mapError(op, err)
 	}
@@ -210,7 +208,6 @@ func (r *PostgresRepository) Update(ctx context.Context, job *Job) error {
 		job.UpdatedAt,
 		job.ID,
 	)
-
 	if err != nil {
 		return r.mapError(op, err)
 	}

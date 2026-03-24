@@ -54,3 +54,9 @@ func (s *Service) Save(ctx context.Context, input *Job) error {
 
 	return nil
 }
+
+// GetbyID is the API read path.
+func (s *Service) GetbyID(ctx context.Context, id int64) (*Job, error) {
+	job, err := s.repo.GetByID(ctx, id)
+	if err != nil {}
+}

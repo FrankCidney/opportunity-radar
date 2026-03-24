@@ -2,7 +2,9 @@ package main
 
 import (
 	"database/sql"
+	"opportunity-radar/internal/ingest"
 	"opportunity-radar/internal/jobs"
+	"opportunity-radar/internal/scoring"
 	"opportunity-radar/internal/shared/config"
 	"opportunity-radar/internal/shared/logger"
 	"os"
@@ -31,5 +33,16 @@ func main() {
 		os.Exit(1)
 	}
 
-	jobRepo := jobs.NewPostgresRepository(sqlDB, logr)
+	jobsRepo := jobs.NewPostgresRepository(sqlDB, logr)
+	jobsService := jobs.NewService(jobsRepo, logr)
+	companyService := &ingest.StubCompanyService{}
+
+	scorer := scoring.NewRulesScorer([]string{"go", "golang", "backend", "remote"})
+	normalizer := &ingest.DefaultNormalizer{}	
+	pipeline := ingest.NewPipeline(normalizer, scorer, jobsService, companyService, logr)
+
+	// TODO: Create this scraper. Write the code.
+	remotiveScraper := remotive.NewScraper(logr)
+	
+	ingestService := ingest.NewService(pipeline, []ingest.Scraper{remotiveScraper}, logr)
 }

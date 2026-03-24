@@ -4,8 +4,14 @@ import (
 	"context"
 	"log/slog"
 
+	"opportunity-radar/internal/companies"
 	"opportunity-radar/internal/jobs"
 )
+
+// Simple company interface to get ID or create the company record if it doesn't exist
+type CompanyService interface {
+	FindOrCreate(ctx context.Context, company *companies.Company) (*companies.Company, error)
+}
 
 // JobService is the ingest package's view of what it needs from jobs.
 // The real *jobs.Service satisfies this.

@@ -56,6 +56,9 @@ func (p *Pipeline) Run(ctx context.Context, scraper Scraper) error {
 			continue
 		}
 
+		// 3. Resolve Company
+		company, err := p.comp
+
 		// 3. Score
 		job.Score = p.scorer.Score(job)
 

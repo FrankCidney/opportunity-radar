@@ -5,6 +5,7 @@ import (
 	"opportunity-radar/internal/ingest"
 	"opportunity-radar/internal/jobs"
 	"opportunity-radar/internal/scoring"
+	"opportunity-radar/internal/scrapers/remotive"
 	"opportunity-radar/internal/shared/config"
 	"opportunity-radar/internal/shared/logger"
 	"os"
@@ -41,7 +42,6 @@ func main() {
 	normalizer := &ingest.DefaultNormalizer{}	
 	pipeline := ingest.NewPipeline(normalizer, scorer, jobsService, companyService, logr)
 
-	// TODO: Create this scraper. Write the code.
 	remotiveScraper := remotive.NewScraper(logr)
 	
 	ingestService := ingest.NewService(pipeline, []ingest.Scraper{remotiveScraper}, logr)

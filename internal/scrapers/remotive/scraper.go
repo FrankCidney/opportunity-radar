@@ -22,7 +22,7 @@ func NewScraper(logger *slog.Logger) *Scraper {
 	}
 }
 
-func (s *Scraper) Source() string { return "remotive"}
+func (s *Scraper) Source() string { return "remotive" }
 
 func (s *Scraper) Scrape(ctx context.Context) ([]ingest.RawJob, error) {
 	req, err := http.NewRequestWithContext(
@@ -43,9 +43,9 @@ func (s *Scraper) Scrape(ctx context.Context) ([]ingest.RawJob, error) {
 
 	var result struct {
 		Jobs []struct {
-			Title string `json:"title"`
+			Title       string `json:"title"`
 			CompanyName string `jsong:"company_name"`
-			URL string `json:"url"`
+			URL         string `json:"url"`
 			Description string `json:"description"`
 			PublishedAt string `json:"publication_date"`
 		} `json:"jobs"`
@@ -58,12 +58,12 @@ func (s *Scraper) Scrape(ctx context.Context) ([]ingest.RawJob, error) {
 	rawJobs := make([]ingest.RawJob, 0, len(result.Jobs))
 	for _, j := range result.Jobs {
 		rawJobs = append(rawJobs, ingest.RawJob{
-            Source:      s.Source(),
-            Title:       j.Title,
-            Company:     j.CompanyName,
-            URL:         j.URL,
-            Description: j.Description,
-            PostedAt:    j.PublishedAt,
+			Source:      s.Source(),
+			Title:       j.Title,
+			Company:     j.CompanyName,
+			URL:         j.URL,
+			Description: j.Description,
+			PostedAt:    j.PublishedAt,
 		})
 	}
 	return rawJobs, nil

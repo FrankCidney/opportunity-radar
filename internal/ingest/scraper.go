@@ -7,6 +7,8 @@ type RawJob struct {
 	Source string // "linkedin", "indeed", etc.
 	Title string
 	Company string
+	CompanyURL string
+	ExternalID string // if the scraper can provide it, otherwise empty
 	Location string
 	Description string
 	URL string

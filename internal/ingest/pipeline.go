@@ -5,15 +5,17 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+
 	"opportunity-radar/internal/jobs"
 	"opportunity-radar/internal/scoring"
 )
 
 type Pipeline struct {
 	normalizer Normalizer
-	scorer scoring.Scorer
+	scorer     scoring.Scorer
 	jobService JobService
-	logger *slog.Logger
+	companyService CompanyService
+	logger     *slog.Logger
 }
 
 func NewPipeline(
@@ -24,9 +26,9 @@ func NewPipeline(
 ) *Pipeline {
 	return &Pipeline{
 		normalizer: normalizer,
-		scorer: scorer,
+		scorer:     scorer,
 		jobService: jobService,
-		logger: logger,
+		logger:     logger,
 	}
 }
 
@@ -46,17 +48,45 @@ func (p *Pipeline) Run(ctx context.Context, scraper Scraper) error {
 
 	for _, rawJob := range rawJobs {
 		// 2. Normalize
-		job, err := p.normalizer.Normalize(rawJob)
+		normalizedJob, err := p.normalizer.Normalize(rawJob)
 		if err != nil {
 			p.logger.Warn("normalization failed",
-			"source", rawJob.Source,
-			"error", err,
+				"source", rawJob.Source,
+				"error", err,
 			)
 			failed++
 			continue
 		}
 
-		// 3. Score
+		// 3. Find or create company
+		var companyID int64
+
+		company, err := p.companyService.FindOrCreate(ctx, normalizedJob.Company)
+		if err != nil {
+			p.logger.Warn("could not resolve company, using unknown",
+				"source", normalizedJob.Source,
+				"url", normalizedJob.Company.Domain,
+				"error", err,
+			)
+			// don't skip the job, just fall through to ID 0, i.e., consider a job with an unknown company as a valid job, and give it company_id = 0 (the sentinel company record)
+		} else {
+			companyID = company.ID
+		}
+
+		// TODO: Add application deadline
+		job := &jobs.Job{
+			CompanyID: companyID,
+			Title:       normalizedJob.Title,
+			Description: normalizedJob.Description,
+			Location:    normalizedJob.Location,
+			URL:         normalizedJob.URL,
+			Source:      normalizedJob.Source,
+			PostedAt:    normalizedJob.PostedAt,
+		}
+
+		job.CompanyID = companyID
+
+		// 4. Score
 		job.Score = p.scorer.Score(job)
 
 		// 4. Save

@@ -45,7 +45,7 @@ func (n *DefaultNormalizer) Normalize(raw RawJob) (*NormalizedJob, error) {
 	return &NormalizedJob{
 		Source:      raw.Source,
 		Title:       strings.TrimSpace(raw.Title),
-		Company: company,
+		Company:     company,
 		Description: raw.Description,
 		Location:    raw.Location,
 		URL:         strings.TrimSpace(raw.URL),

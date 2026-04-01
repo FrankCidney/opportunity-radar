@@ -47,6 +47,7 @@ func (n *DefaultNormalizer) Normalize(raw RawJob) (*NormalizedJob, error) {
 		Source:      raw.Source,
 		Title:       strings.TrimSpace(raw.Title),
 		Company:     company,
+		// TODO: Normalize raw.Description. The job descriptions from remotive come as HTML
 		Description: strings.TrimSpace(raw.Description),
 		Location:    strings.TrimSpace(raw.Location),
 		URL:         url,

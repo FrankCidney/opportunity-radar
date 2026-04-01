@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"strings"
 	"time"
+	"unicode"
 
 	"opportunity-radar/internal/companies"
 )
@@ -36,9 +37,9 @@ func (n *DefaultNormalizer) Normalize(raw RawJob) (*NormalizedJob, error) {
 	url := strings.TrimSpace(raw.URL)
 
 	company := &companies.Company{
-		Name:       raw.Company,
+		Name:       normalizeCompanyName(raw.Company),
 		Source:     raw.Source,
-		ExternalID: raw.ExternalID,
+		ExternalID: strings.TrimSpace(raw.ExternalID),
 		Domain:     extractDomain(url),
 	}
 
@@ -46,9 +47,9 @@ func (n *DefaultNormalizer) Normalize(raw RawJob) (*NormalizedJob, error) {
 		Source:      raw.Source,
 		Title:       strings.TrimSpace(raw.Title),
 		Company:     company,
-		Description: raw.Description,
-		Location:    raw.Location,
-		URL:         strings.TrimSpace(raw.URL),
+		Description: strings.TrimSpace(raw.Description),
+		Location:    strings.TrimSpace(raw.Location),
+		URL:         url,
 		PostedAt:    postedAt,
 	}, nil
 }
@@ -95,6 +96,48 @@ func extractDomain(raw string) string {
 	host = strings.ToLower(host)
 	host = strings.TrimPrefix(host, "www.")
 	return host
+}
+
+func normalizeCompanyName(raw string) string {
+	raw = strings.ToLower(strings.TrimSpace(raw))
+	if raw == "" {
+		return ""
+	}
+
+	raw = strings.Map(func(r rune) rune {
+		switch {
+		case unicode.IsLetter(r), unicode.IsNumber(r), unicode.IsSpace(r):
+			return r
+		default:
+			return ' '
+		}
+	}, raw)
+
+	tokens := strings.Fields(raw)
+	if len(tokens) == 0 {
+		return ""
+	}
+
+	suffixes := map[string]struct{}{
+		"co":           {},
+		"company":      {},
+		"corp":         {},
+		"corporation":  {},
+		"inc":          {},
+		"incorporated": {},
+		"limited":      {},
+		"llc":          {},
+		"ltd":          {},
+	}
+
+	for len(tokens) > 0 {
+		if _, ok := suffixes[tokens[len(tokens)-1]]; !ok {
+			break
+		}
+		tokens = tokens[:len(tokens)-1]
+	}
+
+	return strings.Join(tokens, " ")
 }
 
 // TODO: Add better normalizers, for the different scrapers

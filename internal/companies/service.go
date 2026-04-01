@@ -109,16 +109,12 @@ func (s *Service) Delete(ctx context.Context, id int64) error {
 // FindOrCreate resolves a company by the strongest available identity and
 // creates it when no existing record matches.
 func (s *Service) FindOrCreate(ctx context.Context, input *Company) (*Company, error) {
-	filter := buildFindOrCreateFilter(input)
-
-	if filter != nil {
-		companies, err := s.List(ctx, *filter)
-		if err != nil {
-			return nil, err
-		}
-		if len(companies) > 0 {
-			return &companies[0], nil
-		}
+	existing, err := s.findExisting(ctx, input)
+	if err != nil {
+		return nil, err
+	}
+	if existing != nil {
+		return existing, nil
 	}
 
 	company := &Company{
@@ -132,16 +128,12 @@ func (s *Service) FindOrCreate(ctx context.Context, input *Company) (*Company, e
 	if err := s.repo.Create(ctx, company); err != nil {
 		switch {
 		case errors.Is(err, ErrConflict):
-			if filter == nil {
-				return nil, ErrCompanyAlreadyExists
+			existing, findErr := s.findExisting(ctx, input)
+			if findErr != nil {
+				return nil, findErr
 			}
-
-			companies, listErr := s.List(ctx, *filter)
-			if listErr != nil {
-				return nil, listErr
-			}
-			if len(companies) > 0 {
-				return &companies[0], nil
+			if existing != nil {
+				return existing, nil
 			}
 
 			s.logger.Error("company create conflicted but existing record could not be resolved",
@@ -168,25 +160,52 @@ func (s *Service) FindOrCreate(ctx context.Context, input *Company) (*Company, e
 	return company, nil
 }
 
-func buildFindOrCreateFilter(input *Company) *CompanyListFilter {
+func (s *Service) findExisting(ctx context.Context, input *Company) (*Company, error) {
 	if input == nil {
-		return nil
+		return nil, nil
 	}
 
-	filter := CompanyListFilter{Limit: 1}
-
-	switch {
-	case input.Source != "" && input.ExternalID != "":
-		filter.Source = &input.Source
-		filter.ExternalID = &input.ExternalID
-		return &filter
-	case input.Domain != "":
-		filter.Domain = &input.Domain
-		return &filter
-	case input.Name != "":
-		filter.Name = &input.Name
-		return &filter
-	default:
-		return nil
+	if input.Source != "" && input.ExternalID != "" {
+		company, err := s.findFirst(ctx, CompanyListFilter{
+			Source:     &input.Source,
+			ExternalID: &input.ExternalID,
+			Limit:      1,
+		})
+		if err != nil || company != nil {
+			return company, err
+		}
 	}
+
+	if input.Domain != "" {
+		company, err := s.findFirst(ctx, CompanyListFilter{
+			Domain: &input.Domain,
+			Limit:  1,
+		})
+		if err != nil || company != nil {
+			return company, err
+		}
+	}
+
+	if input.Name != "" {
+		company, err := s.findFirst(ctx, CompanyListFilter{
+			Name:  &input.Name,
+			Limit: 1,
+		})
+		if err != nil || company != nil {
+			return company, err
+		}
+	}
+
+	return nil, nil
+}
+
+func (s *Service) findFirst(ctx context.Context, filter CompanyListFilter) (*Company, error) {
+	companies, err := s.List(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	if len(companies) == 0 {
+		return nil, nil
+	}
+	return &companies[0], nil
 }

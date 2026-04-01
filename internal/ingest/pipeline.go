@@ -84,12 +84,10 @@ func (p *Pipeline) Run(ctx context.Context, scraper Scraper) error {
 			PostedAt:    normalizedJob.PostedAt,
 		}
 
-		job.CompanyID = companyID
-
 		// 4. Score
 		job.Score = p.scorer.Score(job)
 
-		// 4. Save
+		// 5. Save
 		if err := p.jobService.Save(ctx, job); err != nil {
 			// If there's a duplicate, just skip it
 			// TODO: Check whether this error should change ErrConflict from repository_errors.go

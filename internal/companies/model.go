@@ -12,5 +12,3 @@ type Company struct {
 	ExternalID string `db:"external_id" json:"externalId,omitempty"`
 	Domain string `db:"domain" json:"domain,omitempty"`
 }
-
-// TODO: Run the migration to update the db

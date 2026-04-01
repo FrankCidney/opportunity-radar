@@ -22,12 +22,14 @@ func NewPipeline(
 	normalizer Normalizer,
 	scorer scoring.Scorer,
 	jobService JobService,
+	companyService CompanyService,
 	logger *slog.Logger,
 ) *Pipeline {
 	return &Pipeline{
 		normalizer: normalizer,
 		scorer:     scorer,
 		jobService: jobService,
+		companyService: companyService,
 		logger:     logger,
 	}
 }

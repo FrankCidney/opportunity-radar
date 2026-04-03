@@ -1,4 +1,4 @@
-package ingest
+package normalize
 
 import (
 	"fmt"
@@ -10,9 +10,23 @@ import (
 	"opportunity-radar/internal/companies"
 )
 
-// Normalized job structure after normalization. This is the input to the company, step of the pipeline.
+// RawJob is unvalidated, unnormalized, and unprocessed data scraped from a source.
+type RawJob struct {
+	Source      string
+	Title       string
+	Company     string
+	CompanyURL  string
+	ExternalID  string
+	Location    string
+	Description string
+	URL         string
+	PostedAt    string
+	RawData     map[string]interface{}
+}
+
+// NormalizedJob is the canonical job shape after normalization.
 type NormalizedJob struct {
-	Source      string // "linkedin", "indeed", etc.
+	Source      string
 	Title       string
 	Company     *companies.Company
 	ExternalID  string
@@ -22,35 +36,39 @@ type NormalizedJob struct {
 	PostedAt    time.Time
 }
 
-type Normalizer interface {
-	Normalize(raw RawJob) (*NormalizedJob, error)
-}
-
-type DefaultNormalizer struct{}
-
-func (n *DefaultNormalizer) Normalize(raw RawJob) (*NormalizedJob, error) {
-	postedAt, err := parseDate(raw.PostedAt)
+func Normalize(raw RawJob) (*NormalizedJob, error) {
+	job, err := applyDefaultNormalization(raw)
 	if err != nil {
-		return nil, fmt.Errorf("parsing posted_at %q: %w", raw.PostedAt, err)
+		return nil, err
 	}
 
-	url := strings.TrimSpace(raw.URL)
+	job = applySourceOverrides(raw, job)
+	return &job, nil
+}
+
+func applyDefaultNormalization(raw RawJob) (NormalizedJob, error) {
+	postedAt, err := parseDate(raw.PostedAt)
+	if err != nil {
+		return NormalizedJob{}, fmt.Errorf("parsing posted_at %q: %w", raw.PostedAt, err)
+	}
+
+	jobURL := strings.TrimSpace(raw.URL)
 
 	company := &companies.Company{
 		Name:       normalizeCompanyName(raw.Company),
-		Source:     raw.Source,
+		Source:     strings.TrimSpace(raw.Source),
 		ExternalID: strings.TrimSpace(raw.ExternalID),
-		Domain:     extractDomain(url),
+		Domain:     extractDomain(jobURL),
 	}
 
-	return &NormalizedJob{
-		Source:      raw.Source,
+	return NormalizedJob{
+		Source:      strings.TrimSpace(raw.Source),
 		Title:       strings.TrimSpace(raw.Title),
 		Company:     company,
-		// TODO: Normalize raw.Description. The job descriptions from remotive come as HTML
+		ExternalID:  strings.TrimSpace(raw.ExternalID),
 		Description: strings.TrimSpace(raw.Description),
 		Location:    strings.TrimSpace(raw.Location),
-		URL:         url,
+		URL:         jobURL,
 		PostedAt:    postedAt,
 	}, nil
 }
@@ -83,7 +101,6 @@ func extractDomain(raw string) string {
 		return ""
 	}
 
-	// Ensure a scheme is present so url.Parse can extract the host reliably.
 	if !strings.Contains(raw, "://") {
 		raw = "https://" + raw
 	}
@@ -140,5 +157,3 @@ func normalizeCompanyName(raw string) string {
 
 	return strings.Join(tokens, " ")
 }
-
-// TODO: Add better normalizers, for the different scrapers

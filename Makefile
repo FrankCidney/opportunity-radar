@@ -29,3 +29,6 @@ endif
 
 run:
 	env DATABASE_URL="$(DATABASE_URL)" ENV="$(ENV)" PORT="$(PORT)" go run ./cmd/app
+
+run-test:
+	env DATABASE_URL="$(DATABASE_URL)" ENV="$(ENV)" PORT="$(PORT)" go run ./cmd/test

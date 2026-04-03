@@ -10,7 +10,7 @@ import (
 
 	"log/slog"
 
-	"opportunity-radar/internal/ingest"
+	"opportunity-radar/internal/ingest/normalize"
 )
 
 type Scraper struct {
@@ -29,7 +29,7 @@ func (s *Scraper) Source() string {
 	return "remotive"
 }
 
-func (s *Scraper) Scrape(ctx context.Context) ([]ingest.RawJob, error) {
+func (s *Scraper) Scrape(ctx context.Context) ([]normalize.RawJob, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
 		"https://remotive.com/api/remote-jobs?category=software-dev", nil)
 	if err != nil {
@@ -55,7 +55,7 @@ func (s *Scraper) Scrape(ctx context.Context) ([]ingest.RawJob, error) {
 			URL         string `json:"url"`
 			Description string `json:"description"`
 			PublishedAt string `json:"publication_date"`
-			Location string `json:"candidate_required_location"`
+			Location    string `json:"candidate_required_location"`
 		} `json:"jobs"`
 	}
 
@@ -63,18 +63,18 @@ func (s *Scraper) Scrape(ctx context.Context) ([]ingest.RawJob, error) {
 		return nil, fmt.Errorf("decode: %w", err)
 	}
 
-	raws := make([]ingest.RawJob, 0, len(result.Jobs))
+	raws := make([]normalize.RawJob, 0, len(result.Jobs))
 
 	for _, j := range result.Jobs {
-		raws = append(raws, ingest.RawJob{
-			ExternalID:    strconv.Itoa(j.ID),
+		raws = append(raws, normalize.RawJob{
+			ExternalID:  strconv.Itoa(j.ID),
 			Source:      s.Source(),
 			Title:       j.Title,
 			Company:     j.CompanyName,
 			URL:         j.URL,
 			Description: j.Description,
 			PostedAt:    j.PublishedAt,
-			Location:   j.Location,
+			Location:    j.Location,
 		})
 	}
 

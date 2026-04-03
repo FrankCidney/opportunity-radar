@@ -14,7 +14,7 @@ import (
 func main() {
 	// Load config
 	cfg := config.Load()
-	
+
 	// Initialize structured logger
 	logr := logger.New(cfg.Env)
 
@@ -24,13 +24,13 @@ func main() {
 
 	sqlDB, err := sql.Open("postgres", cfg.DatabaseURL)
 	if err != nil {
-		logr.Error("error setting up db: %v", err)
+		logr.Error("error setting up db", "error", err)
 		os.Exit(1)
 	}
 
 	err = sqlDB.Ping()
 	if err != nil {
-		logr.Error("failed to connect to db: %v", err)
+		logr.Error("failed to connect to db", "error", err)
 		os.Exit(1)
 	}
 
@@ -39,10 +39,9 @@ func main() {
 	companyService := &ingest.StubCompanyService{}
 
 	scorer := scoring.NewRulesScorer([]string{"go", "golang", "backend", "remote"})
-	normalizer := &ingest.DefaultNormalizer{}	
-	pipeline := ingest.NewPipeline(normalizer, scorer, jobsService, companyService, logr)
+	pipeline := ingest.NewPipeline(scorer, jobsService, companyService, logr)
 
 	remotiveScraper := remotive.NewScraper(logr)
-	
-	ingestService := ingest.NewService(pipeline, []ingest.Scraper{remotiveScraper}, logr)
+
+	ingest.NewService(pipeline, []ingest.Scraper{remotiveScraper}, logr)
 }

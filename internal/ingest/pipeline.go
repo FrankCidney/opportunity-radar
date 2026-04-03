@@ -6,31 +6,29 @@ import (
 	"fmt"
 	"log/slog"
 
+	"opportunity-radar/internal/ingest/normalize"
 	"opportunity-radar/internal/jobs"
 	"opportunity-radar/internal/scoring"
 )
 
 type Pipeline struct {
-	normalizer Normalizer
-	scorer     scoring.Scorer
-	jobService JobService
+	scorer         scoring.Scorer
+	jobService     JobService
 	companyService CompanyService
-	logger     *slog.Logger
+	logger         *slog.Logger
 }
 
 func NewPipeline(
-	normalizer Normalizer,
 	scorer scoring.Scorer,
 	jobService JobService,
 	companyService CompanyService,
 	logger *slog.Logger,
 ) *Pipeline {
 	return &Pipeline{
-		normalizer: normalizer,
-		scorer:     scorer,
-		jobService: jobService,
+		scorer:         scorer,
+		jobService:     jobService,
 		companyService: companyService,
-		logger:     logger,
+		logger:         logger,
 	}
 }
 
@@ -50,7 +48,7 @@ func (p *Pipeline) Run(ctx context.Context, scraper Scraper) error {
 
 	for _, rawJob := range rawJobs {
 		// 2. Normalize
-		normalizedJob, err := p.normalizer.Normalize(rawJob)
+		normalizedJob, err := normalize.Normalize(rawJob)
 		if err != nil {
 			p.logger.Warn("normalization failed",
 				"source", rawJob.Source,
@@ -77,7 +75,7 @@ func (p *Pipeline) Run(ctx context.Context, scraper Scraper) error {
 
 		// TODO: Add application deadline
 		job := &jobs.Job{
-			CompanyID: companyID,
+			CompanyID:   companyID,
 			Title:       normalizedJob.Title,
 			Description: normalizedJob.Description,
 			Location:    normalizedJob.Location,

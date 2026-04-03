@@ -11,6 +11,7 @@ The project is still early, but the core ingest path is now taking shape:
 - companies are resolved or created before jobs are saved
 - jobs are scored with a simple rule-based scorer
 - jobs and companies both have repository and service layers
+- `cmd/app` can now run the ingest pipeline end to end against PostgreSQL
 
 The next planned feature is a scheduler to run scraping periodically, likely every 3 days.
 
@@ -25,12 +26,13 @@ It currently wires together:
 - config loading
 - structured logging
 - PostgreSQL connection
+- `companies` Postgres repository and service
 - `jobs` Postgres repository and service
 - ingest pipeline
 - `remotive` scraper
 - ingest service
 
-The app is not yet fully finished as a runnable long-lived service because the constructed `ingestService` is not used yet.
+It now invokes the ingest service directly, so the current app entrypoint can perform a full scrape -> normalize -> resolve company -> score -> save run.
 
 ### Ingest Pipeline
 
@@ -38,7 +40,9 @@ The ingest flow lives mainly in:
 
 - [pipeline.go](/home/francis/projects/my-repos/opportunity-radar/internal/ingest/pipeline.go)
 - [service.go](/home/francis/projects/my-repos/opportunity-radar/internal/ingest/service.go)
-- [normalizer.go](/home/francis/projects/my-repos/opportunity-radar/internal/ingest/normalizer.go)
+- [default.go](/home/francis/projects/my-repos/opportunity-radar/internal/ingest/normalize/default.go)
+- [overrides.go](/home/francis/projects/my-repos/opportunity-radar/internal/ingest/normalize/overrides.go)
+- [description.go](/home/francis/projects/my-repos/opportunity-radar/internal/ingest/normalize/description.go)
 - [scraper.go](/home/francis/projects/my-repos/opportunity-radar/internal/ingest/scraper.go)
 
 Current behavior:
@@ -61,14 +65,18 @@ Pipeline behavior is intentionally resilient:
 
 This area was recently improved.
 
-In [normalizer.go](/home/francis/projects/my-repos/opportunity-radar/internal/ingest/normalizer.go):
+In the `internal/ingest/normalize` package:
 
 - company names are normalized to a simpler fallback key
 - names are lowercased
 - punctuation is stripped
 - whitespace is collapsed
 - common company suffixes like `inc`, `llc`, `ltd`, `corp`, and `company` are removed
-- domains are extracted from job URLs
+- the default normalizer is now conservative about company identity and does not infer company `domain` or `external_id` from job-level fields
+- source-specific overrides are applied after shared normalization
+- Remotive descriptions are converted from HTML to readable plain text
+- Remotive descriptions can prepend source-specific metadata like `job_type` and `salary`
+- company logos can flow through normalization when the source provides them
 
 Example:
 
@@ -81,6 +89,11 @@ In [service.go](/home/francis/projects/my-repos/opportunity-radar/internal/compa
 3. `name`
 
 This is a safer default for a multi-source ingest pipeline than stopping after the first available identity signal.
+
+One important caveat remains:
+
+- when a source does not provide trustworthy company-level identifiers, matching falls back to normalized name
+- this is much safer than inferring from job URLs, but it is still an imperfect heuristic
 
 ## Domain Packages
 
@@ -138,6 +151,8 @@ Current company identity strategy:
 - cross-source fallback: `domain`
 - weakest fallback: exact normalized `name`
 
+In practice, the default normalizer now only populates company identity fields that are truly company-level data. Source-specific overrides can enrich `external_id`, `domain`, or `logo_url` later when a source provides reliable values.
+
 ## Persistence
 
 Persistence is PostgreSQL-based and implemented with explicit SQL, not an ORM.
@@ -182,7 +197,8 @@ The scraper:
 
 - calls the Remotive API
 - parses the JSON response
-- converts response items into `ingest.RawJob`
+- converts response items into `normalize.RawJob`
+- currently captures company logo, job type, salary, HTML description, and other core job fields
 
 This establishes the current scraper contract and pattern for future source integrations.
 
@@ -234,28 +250,28 @@ There is not yet a real API or UI flow built on top of the services.
 
 ### App Runtime
 
-`cmd/app` sets up the service graph, but it does not yet:
+`cmd/app` now sets up the service graph and runs the ingest service once on startup.
 
-- run the ingest service
+It still does not yet:
+
 - run a scheduler
 - expose HTTP endpoints
 - coordinate graceful shutdown
 
 ### Tests
 
-There are little to no tests yet.
+There are still few tests overall, but there is now at least focused coverage around Remotive description normalization.
 
-The code compiles at the package level for the areas most recently touched, but there is not yet meaningful automated coverage of:
+The code currently passes `go test ./...`, but there is not yet meaningful automated coverage of:
 
 - ingest behavior
 - service error translation
 - repository behavior
-- normalization edge cases
+- most normalization edge cases
 - scheduler behavior
 
 ## Known Issues / Caveats
 
-- `go test ./...` does not currently pass because [main.go](/home/francis/projects/my-repos/opportunity-radar/cmd/app/main.go) declares `ingestService` but does not use it.
 - Company names are currently stored in normalized form for matching, not preserved separately as a display/original name.
 - Company fallback matching by exact normalized name is useful but still imperfect.
 - The ingest pipeline assumes a sentinel unknown company record or `company_id = 0` fallback, but that behavior is not yet fully formalized in schema and application design.

@@ -1,8 +1,16 @@
 package normalize
 
-import "strings"
+import (
+	"strings"
+
+	"jaytaylor.com/html2text"
+)
 
 func normalizeRemotiveDescription(raw string) string {
-	// TODO: Convert Remotive HTML descriptions into normalized plain text.
-	return strings.TrimSpace(raw)
+	text, err := html2text.FromString(raw, html2text.Options{})
+	if err != nil {
+		return strings.TrimSpace(raw)
+	}
+
+	return strings.TrimSpace(text)
 }

@@ -4,10 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"opportunity-radar/internal/companies"
 	"opportunity-radar/internal/ingest"
 	"opportunity-radar/internal/jobs"
+	"opportunity-radar/internal/scheduler"
 	"opportunity-radar/internal/scoring"
 	"opportunity-radar/internal/scrapers/remotive"
 	"opportunity-radar/internal/shared/config"
@@ -15,6 +18,9 @@ import (
 )
 
 func main() {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	// Load config
 	cfg := config.Load()
 
@@ -49,8 +55,24 @@ func main() {
 	remotiveScraper := remotive.NewScraper(logr)
 
 	ingestService := ingest.NewService(pipeline, []ingest.Scraper{remotiveScraper}, logr)
-	if err := ingestService.RunAll(context.Background()); err != nil {
-		logr.Error("ingest run failed", "error", err)
+
+	if !cfg.SchedulerEnabled {
+		logr.Info("scheduler disabled; running ingest once")
+		if err := ingestService.RunAll(ctx); err != nil {
+			logr.Error("ingest run failed", "error", err)
+			os.Exit(1)
+		}
+		return
+	}
+
+	sched := scheduler.New(ingestService, scheduler.Config{
+		Interval:   cfg.SchedulerInterval,
+		RunOnStart: cfg.SchedulerRunOnStart,
+		RunTimeout: cfg.SchedulerRunTimeout,
+	}, logr)
+
+	if err := sched.Run(ctx); err != nil {
+		logr.Error("scheduler failed", "error", err)
 		os.Exit(1)
 	}
 }

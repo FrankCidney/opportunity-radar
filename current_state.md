@@ -11,9 +11,7 @@ The project is still early, but the core ingest path is now taking shape:
 - companies are resolved or created before jobs are saved
 - jobs are scored with a simple rule-based scorer
 - jobs and companies both have repository and service layers
-- `cmd/app` can now run the ingest pipeline end to end against PostgreSQL
-
-The next planned feature is a scheduler to run scraping periodically, likely every 3 days.
+- `cmd/app` can now run the ingest pipeline on startup and then continue on a daily scheduler against PostgreSQL
 
 ## What Exists Today
 
@@ -31,8 +29,16 @@ It currently wires together:
 - ingest pipeline
 - `remotive` scraper
 - ingest service
+- scheduler
+- signal-based shutdown context
 
-It now invokes the ingest service directly, so the current app entrypoint can perform a full scrape -> normalize -> resolve company -> score -> save run.
+The current app entrypoint now:
+
+- builds the service graph
+- creates a root context tied to `SIGINT` / `SIGTERM`
+- runs one ingest cycle immediately on startup by default
+- continues periodic ingest runs every 24 hours by default
+- shuts down cleanly when the process is stopped
 
 ### Ingest Pipeline
 
@@ -208,6 +214,14 @@ Shared infrastructure currently includes:
 
 - [config.go](/home/francis/projects/my-repos/opportunity-radar/internal/shared/config/config.go) for env-based config
 - [logger.go](/home/francis/projects/my-repos/opportunity-radar/internal/shared/logger/logger.go) for `slog` setup
+- [scheduler.go](/home/francis/projects/my-repos/opportunity-radar/internal/scheduler/scheduler.go) for periodic ingest execution
+
+Scheduler config is now environment-driven. Current settings include:
+
+- `SCHEDULER_ENABLED` to switch between continuous scheduling and one-shot mode
+- `SCHEDULER_INTERVAL` with a default of `24h`
+- `SCHEDULER_RUN_ON_START` with a default of `true`
+- `SCHEDULER_RUN_TIMEOUT` with a default of `30m`
 
 The codebase consistently uses:
 
@@ -233,9 +247,17 @@ Several pieces are present only as scaffolding or are not fully wired yet.
 
 ### Scheduler
 
-The scheduler package exists as [scheduler.go](/home/francis/projects/my-repos/opportunity-radar/internal/scheduler/scheduler.go), but it is currently just a stub.
+The scheduler is now implemented in [scheduler.go](/home/francis/projects/my-repos/opportunity-radar/internal/scheduler/scheduler.go).
 
-There is no periodic execution yet.
+Current scheduler behavior:
+
+- runs the ingest service through a small `Runner` interface
+- triggers one immediate run on startup by default
+- triggers recurring runs every 24 hours by default
+- skips a tick if the previous run is still in progress
+- can apply a per-run timeout through context
+- logs run start, completion, duration, and failure
+- stops when the application context is cancelled
 
 ### HTTP Layer
 
@@ -250,17 +272,21 @@ There is not yet a real API or UI flow built on top of the services.
 
 ### App Runtime
 
-`cmd/app` now sets up the service graph and runs the ingest service once on startup.
+`cmd/app` now sets up the service graph and starts the scheduler by default.
 
 It still does not yet:
 
-- run a scheduler
 - expose HTTP endpoints
-- coordinate graceful shutdown
+
+Useful runtime commands now live in the `Makefile`:
+
+- `make run` to start the normal scheduler-enabled app
+- `make run-once` to run ingest once with scheduling disabled
+- `make run-scheduler-smoke` to run the app with a `5s` interval for local verification
 
 ### Tests
 
-There are still few tests overall, but there is now at least focused coverage around Remotive description normalization.
+There are still few tests overall, but there is now focused coverage around Remotive description normalization and scheduler behavior.
 
 The code currently passes `go test ./...`, but there is not yet meaningful automated coverage of:
 
@@ -268,13 +294,15 @@ The code currently passes `go test ./...`, but there is not yet meaningful autom
 - service error translation
 - repository behavior
 - most normalization edge cases
-- scheduler behavior
 
 ## Known Issues / Caveats
 
 - Company names are currently stored in normalized form for matching, not preserved separately as a display/original name.
 - Company fallback matching by exact normalized name is useful but still imperfect.
 - The ingest pipeline assumes a sentinel unknown company record or `company_id = 0` fallback, but that behavior is not yet fully formalized in schema and application design.
+- Scheduler shutdown is graceful for `SIGINT` / `SIGTERM`, but not for hard kills or process panics.
+- Scheduler cancellation depends on downstream work respecting `context.Context`; a scraper or DB call that ignores cancellation may delay shutdown.
+- The scheduler is currently in-process and memory-only: it does not persist last-run state, catch up missed runs after downtime, or coordinate across multiple app instances.
 
 ## Current Operational Picture
 
@@ -284,19 +312,19 @@ Today, the project is best described as:
 - persistence layer: implemented for jobs and companies
 - scoring: implemented at a basic level
 - scraper support: one source implemented
-- scheduler: not implemented
+- scheduler: implemented for single-process daily execution
 - HTTP/UI: not implemented
-- tests: minimal
+- tests: still light overall, but scheduler unit tests now exist
 
 ## Immediate Next Step
 
-The next major feature is to implement a scheduler so scraping runs automatically every 3 days.
+The scheduler is now in place, so the next major feature is likely to be the HTTP/API layer or richer ingest coverage.
 
-That likely means:
+Natural next implementation areas now look like:
 
-- deciding whether the scheduler owns timing only or also startup execution
-- defining how it receives an ingest runner dependency
-- wiring it into `cmd/app`
-- ensuring runs are logged clearly and do not overlap accidentally
+- exposing jobs and companies through handlers/routes
+- adding stronger automated coverage for ingest and repository behavior
+- formalizing the sentinel unknown-company behavior
+- adding more scrapers and richer scoring logic
 
 This file should be updated as those decisions are made and implemented.

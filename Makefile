@@ -4,8 +4,13 @@
 include .env
 export
 
+SCHEDULER_ENABLED ?= true
+SCHEDULER_INTERVAL ?= 24h
+SCHEDULER_RUN_ON_START ?= true
+SCHEDULER_RUN_TIMEOUT ?= 30m
+
 # Targets
-.PHONY: migrate-up migrate-down migrate-create run
+.PHONY: migrate-up migrate-down migrate-force migrate-create run run-once run-scheduler-smoke run-test
 
 migrate-up:
 	migrate -path migrations -database "$(DATABASE_URL)" up
@@ -28,7 +33,25 @@ endif
 	migrate create -ext sql -dir migrations "$(name)"
 
 run:
-	env DATABASE_URL="$(DATABASE_URL)" ENV="$(ENV)" PORT="$(PORT)" go run ./cmd/app
+	env DATABASE_URL="$(DATABASE_URL)" ENV="$(ENV)" PORT="$(PORT)" \
+		SCHEDULER_ENABLED="$(SCHEDULER_ENABLED)" \
+		SCHEDULER_INTERVAL="$(SCHEDULER_INTERVAL)" \
+		SCHEDULER_RUN_ON_START="$(SCHEDULER_RUN_ON_START)" \
+		SCHEDULER_RUN_TIMEOUT="$(SCHEDULER_RUN_TIMEOUT)" \
+		go run ./cmd/app
+
+run-once:
+	env DATABASE_URL="$(DATABASE_URL)" ENV="$(ENV)" PORT="$(PORT)" \
+		SCHEDULER_ENABLED="false" \
+		go run ./cmd/app
+
+run-scheduler-smoke:
+	env DATABASE_URL="$(DATABASE_URL)" ENV="$(ENV)" PORT="$(PORT)" \
+		SCHEDULER_ENABLED="true" \
+		SCHEDULER_INTERVAL="5s" \
+		SCHEDULER_RUN_ON_START="true" \
+		SCHEDULER_RUN_TIMEOUT="20s" \
+		go run ./cmd/app
 
 run-test:
 	env DATABASE_URL="$(DATABASE_URL)" ENV="$(ENV)" PORT="$(PORT)" go run ./cmd/test

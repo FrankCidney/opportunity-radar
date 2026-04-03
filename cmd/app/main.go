@@ -8,6 +8,7 @@ import (
 	"syscall"
 
 	"opportunity-radar/internal/companies"
+	"opportunity-radar/internal/digest"
 	"opportunity-radar/internal/ingest"
 	"opportunity-radar/internal/jobs"
 	"opportunity-radar/internal/scheduler"
@@ -48,6 +49,7 @@ func main() {
 	companyService := companies.NewService(companiesRepo, logr)
 	jobsRepo := jobs.NewPostgresRepository(sqlDB, logr)
 	jobsService := jobs.NewService(jobsRepo, logr)
+	digestRepo := digest.NewPostgresRepository(sqlDB, logr)
 
 	scorer := scoring.NewRulesScorer([]string{"go", "golang", "backend", "remote"})
 	pipeline := ingest.NewPipeline(scorer, jobsService, companyService, logr)
@@ -55,17 +57,31 @@ func main() {
 	remotiveScraper := remotive.NewScraper(logr)
 
 	ingestService := ingest.NewService(pipeline, []ingest.Scraper{remotiveScraper}, logr)
+	digestService := digest.NewService(
+		digestRepo,
+		jobsService,
+		companyService,
+		digest.NewLoggingSender(logr),
+		digest.Config{
+			Enabled:   cfg.DigestEnabled,
+			Recipient: cfg.DigestToEmail,
+			TopN:      cfg.DigestTopN,
+			Lookback:  cfg.DigestLookback,
+		},
+		logr,
+	)
+	runner := digest.NewRunner(ingestService, digestService, logr)
 
 	if !cfg.SchedulerEnabled {
 		logr.Info("scheduler disabled; running ingest once")
-		if err := ingestService.RunAll(ctx); err != nil {
+		if err := runner.RunAll(ctx); err != nil {
 			logr.Error("ingest run failed", "error", err)
 			os.Exit(1)
 		}
 		return
 	}
 
-	sched := scheduler.New(ingestService, scheduler.Config{
+	sched := scheduler.New(runner, scheduler.Config{
 		Interval:   cfg.SchedulerInterval,
 		RunOnStart: cfg.SchedulerRunOnStart,
 		RunTimeout: cfg.SchedulerRunTimeout,

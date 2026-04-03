@@ -264,13 +264,19 @@ func (r *PostgresRepository) List(ctx context.Context, filter JobListFilter) ([]
 
 	if filter.CompanyID != nil {
 		conditions = append(conditions, fmt.Sprintf("company_id = $%d", argPos))
-		args = append(args, filter.CompanyID)
+		args = append(args, *filter.CompanyID)
 		argPos++
 	}
 
 	if filter.Status != nil {
 		conditions = append(conditions, fmt.Sprintf("status = $%d", argPos))
-		args = append(args, filter.Status)
+		args = append(args, *filter.Status)
+		argPos++
+	}
+
+	if filter.CreatedAfter != nil {
+		conditions = append(conditions, fmt.Sprintf("created_at >= $%d", argPos))
+		args = append(args, *filter.CreatedAfter)
 		argPos++
 	}
 
@@ -280,7 +286,12 @@ func (r *PostgresRepository) List(ctx context.Context, filter JobListFilter) ([]
 		query += "WHERE " + strings.Join(conditions, " AND ")
 	}
 
-	query += " ORDER BY posted_at DESC"
+	switch filter.SortBy {
+	case JobSortScoreDesc:
+		query += " ORDER BY score DESC, posted_at DESC, created_at DESC"
+	default:
+		query += " ORDER BY posted_at DESC, created_at DESC"
+	}
 
 	if filter.Limit > 0 {
 		query += fmt.Sprintf(" LIMIT $%d", argPos)

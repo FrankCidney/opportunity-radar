@@ -2,13 +2,23 @@ package jobs
 
 import (
 	"context"
+	"time"
+)
+
+type JobSort string
+
+const (
+	JobSortPostedAtDesc JobSort = "posted_at_desc"
+	JobSortScoreDesc    JobSort = "score_desc"
 )
 
 type JobListFilter struct {
-	CompanyID *int64
-	Status *JobStatus
-	Limit int
-	Offset int
+	CompanyID    *int64
+	Status       *JobStatus
+	CreatedAfter *time.Time
+	Limit        int
+	Offset       int
+	SortBy       JobSort
 }
 
 type Repository interface {

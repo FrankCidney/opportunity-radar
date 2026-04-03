@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"strconv"
 	"time"
 )
 
@@ -13,6 +14,10 @@ type Config struct {
 	SchedulerInterval   time.Duration
 	SchedulerRunOnStart bool
 	SchedulerRunTimeout time.Duration
+	DigestEnabled       bool
+	DigestToEmail       string
+	DigestTopN          int
+	DigestLookback      time.Duration
 }
 
 func getEnv(key, fallback string) string {
@@ -61,6 +66,20 @@ func getEnvDuration(key string, fallback time.Duration) time.Duration {
 	return duration
 }
 
+func getEnvInt(key string, fallback int) int {
+	val := os.Getenv(key)
+	if val == "" {
+		return fallback
+	}
+
+	parsed, err := strconv.Atoi(val)
+	if err != nil {
+		panic(key + " must be a valid integer")
+	}
+
+	return parsed
+}
+
 func Load() Config {
 	return Config{
 		Env:                 getEnv("ENV", "development"),
@@ -70,5 +89,9 @@ func Load() Config {
 		SchedulerInterval:   getEnvDuration("SCHEDULER_INTERVAL", 24*time.Hour),
 		SchedulerRunOnStart: getEnvBool("SCHEDULER_RUN_ON_START", true),
 		SchedulerRunTimeout: getEnvDuration("SCHEDULER_RUN_TIMEOUT", 30*time.Minute),
+		DigestEnabled:       getEnvBool("DIGEST_ENABLED", false),
+		DigestToEmail:       getEnv("DIGEST_TO_EMAIL", ""),
+		DigestTopN:          getEnvInt("DIGEST_TOP_N", 10),
+		DigestLookback:      getEnvDuration("DIGEST_LOOKBACK", 24*time.Hour),
 	}
 }

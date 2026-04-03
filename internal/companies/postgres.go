@@ -284,5 +284,9 @@ func (r *PostgresRepository) List(ctx context.Context, filter CompanyListFilter)
 		companies = append(companies, company)
 	}
 
-	return companies, r.mapError(op, rows.Err())
+	if err := rows.Err(); err != nil {
+		return nil, r.mapError(op, err)
+	}
+
+	return companies, nil
 }

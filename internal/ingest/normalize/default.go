@@ -16,8 +16,11 @@ type RawJob struct {
 	Title       string
 	Company     string
 	CompanyURL  string
+	CompanyLogo string
 	ExternalID  string
 	Location    string
+	JobType     string
+	Salary      string
 	Description string
 	URL         string
 	PostedAt    string
@@ -55,10 +58,9 @@ func applyDefaultNormalization(raw RawJob) (NormalizedJob, error) {
 	jobURL := strings.TrimSpace(raw.URL)
 
 	company := &companies.Company{
-		Name:       normalizeCompanyName(raw.Company),
-		Source:     strings.TrimSpace(raw.Source),
-		ExternalID: strings.TrimSpace(raw.ExternalID),
-		Domain:     extractDomain(jobURL),
+		Name:    normalizeCompanyName(raw.Company),
+		LogoURL: strings.TrimSpace(raw.CompanyLogo),
+		Source:  strings.TrimSpace(raw.Source),
 	}
 
 	return NormalizedJob{

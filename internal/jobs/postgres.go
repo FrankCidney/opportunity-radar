@@ -325,5 +325,9 @@ func (r *PostgresRepository) List(ctx context.Context, filter JobListFilter) ([]
 		jobs = append(jobs, job)
 	}
 
-	return jobs, r.mapError(op, rows.Err())
+	if err := rows.Err(); err != nil {
+		return nil, r.mapError(op, err)
+	}
+
+	return jobs, nil
 }

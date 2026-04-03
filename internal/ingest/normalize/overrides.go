@@ -3,7 +3,7 @@ package normalize
 func applySourceOverrides(raw RawJob, job NormalizedJob) NormalizedJob {
 	switch raw.Source {
 	case "remotive":
-		job.Description = normalizeRemotiveDescription(raw.Description)
+		job.Description = normalizeRemotiveDescription(raw)
 	}
 
 	return job

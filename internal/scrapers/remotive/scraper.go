@@ -52,7 +52,10 @@ func (s *Scraper) Scrape(ctx context.Context) ([]normalize.RawJob, error) {
 			ID          int    `json:"id"`
 			Title       string `json:"title"`
 			CompanyName string `json:"company_name"`
+			CompanyLogo string `json:"company_logo"`
 			URL         string `json:"url"`
+			JobType     string `json:"job_type"`
+			Salary      string `json:"salary"`
 			Description string `json:"description"`
 			PublishedAt string `json:"publication_date"`
 			Location    string `json:"candidate_required_location"`
@@ -71,7 +74,10 @@ func (s *Scraper) Scrape(ctx context.Context) ([]normalize.RawJob, error) {
 			Source:      s.Source(),
 			Title:       j.Title,
 			Company:     j.CompanyName,
+			CompanyLogo: j.CompanyLogo,
 			URL:         j.URL,
+			JobType:     j.JobType,
+			Salary:      j.Salary,
 			Description: j.Description,
 			PostedAt:    j.PublishedAt,
 			Location:    j.Location,

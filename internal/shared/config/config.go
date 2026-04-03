@@ -18,6 +18,9 @@ type Config struct {
 	DigestToEmail       string
 	DigestTopN          int
 	DigestLookback      time.Duration
+	ResendAPIKey        string
+	ResendFromEmail     string
+	ResendFromName      string
 }
 
 func getEnv(key, fallback string) string {
@@ -93,5 +96,8 @@ func Load() Config {
 		DigestToEmail:       getEnv("DIGEST_TO_EMAIL", ""),
 		DigestTopN:          getEnvInt("DIGEST_TOP_N", 10),
 		DigestLookback:      getEnvDuration("DIGEST_LOOKBACK", 24*time.Hour),
+		ResendAPIKey:        getEnv("RESEND_API_KEY", ""),
+		ResendFromEmail:     getEnv("RESEND_FROM_EMAIL", ""),
+		ResendFromName:      getEnv("RESEND_FROM_NAME", ""),
 	}
 }

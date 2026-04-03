@@ -11,7 +11,7 @@ The project is still early, but the core ingest path is now taking shape:
 - companies are resolved or created before jobs are saved
 - jobs are scored with a simple rule-based scorer
 - jobs and companies both have repository and service layers
-- `cmd/app` can now run the ingest pipeline on startup and then continue on a daily scheduler against PostgreSQL
+- `cmd/app` can now run ingest on startup, continue on a daily scheduler, and send a daily digest of top-scored jobs through Resend when configured
 
 ## What Exists Today
 
@@ -29,6 +29,8 @@ It currently wires together:
 - ingest pipeline
 - `remotive` scraper
 - ingest service
+- digest service
+- digest runner/orchestrator
 - scheduler
 - signal-based shutdown context
 
@@ -37,8 +39,15 @@ The current app entrypoint now:
 - builds the service graph
 - creates a root context tied to `SIGINT` / `SIGTERM`
 - runs one ingest cycle immediately on startup by default
+- runs the digest workflow after ingest in the same scheduled cycle
 - continues periodic ingest runs every 24 hours by default
 - shuts down cleanly when the process is stopped
+
+The current run order for one scheduler cycle is:
+
+1. scheduler triggers a run
+2. runner executes ingest
+3. runner executes the daily digest workflow
 
 ### Ingest Pipeline
 
@@ -167,14 +176,17 @@ Relevant files:
 
 - [postgres.go](/home/francis/projects/my-repos/opportunity-radar/internal/jobs/postgres.go)
 - [postgres.go](/home/francis/projects/my-repos/opportunity-radar/internal/companies/postgres.go)
+- [postgres.go](/home/francis/projects/my-repos/opportunity-radar/internal/digest/postgres.go)
 - [migrations](/home/francis/projects/my-repos/opportunity-radar/migrations)
 
 Current schema support includes:
 
 - `companies` table
 - `jobs` table
+- `digest_deliveries` table
 - uniqueness on job `source + url`
 - newer company fields: `source`, `external_id`, and `domain`
+- uniqueness on digest delivery `recipient + digest_date`
 
 Repository behavior is structured consistently:
 
@@ -215,6 +227,9 @@ Shared infrastructure currently includes:
 - [config.go](/home/francis/projects/my-repos/opportunity-radar/internal/shared/config/config.go) for env-based config
 - [logger.go](/home/francis/projects/my-repos/opportunity-radar/internal/shared/logger/logger.go) for `slog` setup
 - [scheduler.go](/home/francis/projects/my-repos/opportunity-radar/internal/scheduler/scheduler.go) for periodic ingest execution
+- [service.go](/home/francis/projects/my-repos/opportunity-radar/internal/digest/service.go) for daily digest selection and send tracking
+- [runner.go](/home/francis/projects/my-repos/opportunity-radar/internal/digest/runner.go) for sequencing ingest before digest
+- [sender.go](/home/francis/projects/my-repos/opportunity-radar/internal/digest/sender.go) for digest sender implementations, including Resend and logging fallback
 
 Scheduler config is now environment-driven. Current settings include:
 
@@ -222,6 +237,19 @@ Scheduler config is now environment-driven. Current settings include:
 - `SCHEDULER_INTERVAL` with a default of `24h`
 - `SCHEDULER_RUN_ON_START` with a default of `true`
 - `SCHEDULER_RUN_TIMEOUT` with a default of `30m`
+
+Digest config is also environment-driven. Current settings include:
+
+- `DIGEST_ENABLED` to turn the digest workflow on or off
+- `DIGEST_TO_EMAIL` for the recipient address
+- `DIGEST_TOP_N` with a default of `10`
+- `DIGEST_LOOKBACK` with a default of `24h`
+
+Resend email delivery is also environment-driven. Current settings include:
+
+- `RESEND_API_KEY`
+- `RESEND_FROM_EMAIL`
+- `RESEND_FROM_NAME`
 
 The codebase consistently uses:
 
@@ -259,6 +287,27 @@ Current scheduler behavior:
 - logs run start, completion, duration, and failure
 - stops when the application context is cancelled
 
+### Daily Digest
+
+The daily digest plumbing is now implemented in the `internal/digest` package.
+
+Current digest behavior:
+
+- runs after ingest in the same scheduled cycle
+- selects recent active jobs by `created_at`
+- ranks digest candidates by score descending, then recency
+- enriches jobs with company names when available
+- renders both text and HTML digest content
+- records sent digests in `digest_deliveries` so one recipient does not get the same day’s digest twice
+- sends through Resend when provider config is present
+- falls back to a logging sender when Resend is not configured
+
+Current provider behavior:
+
+- real email delivery is implemented through Resend
+- local and incomplete-config environments fall back to logging instead of failing hard
+- the digest sender remains interface-based, so another provider can still be added later
+
 ### HTTP Layer
 
 The following files exist but are mostly stubs:
@@ -286,7 +335,7 @@ Useful runtime commands now live in the `Makefile`:
 
 ### Tests
 
-There are still few tests overall, but there is now focused coverage around Remotive description normalization and scheduler behavior.
+There are still few tests overall, but there is now focused coverage around Remotive description normalization, scheduler behavior, and digest selection/send tracking behavior.
 
 The code currently passes `go test ./...`, but there is not yet meaningful automated coverage of:
 
@@ -303,6 +352,8 @@ The code currently passes `go test ./...`, but there is not yet meaningful autom
 - Scheduler shutdown is graceful for `SIGINT` / `SIGTERM`, but not for hard kills or process panics.
 - Scheduler cancellation depends on downstream work respecting `context.Context`; a scraper or DB call that ignores cancellation may delay shutdown.
 - The scheduler is currently in-process and memory-only: it does not persist last-run state, catch up missed runs after downtime, or coordinate across multiple app instances.
+- Email delivery depends on correct Resend configuration and a verified sender identity; without that config the app intentionally falls back to logging mode.
+- Digest idempotency is tracked per UTC day and recipient, which is fine for the current single-tenant model but will need revisiting if user time zones or multiple digests per day are introduced.
 
 ## Current Operational Picture
 
@@ -313,12 +364,26 @@ Today, the project is best described as:
 - scoring: implemented at a basic level
 - scraper support: one source implemented
 - scheduler: implemented for single-process daily execution
+- daily digest: implemented with persisted send tracking and Resend delivery support
 - HTTP/UI: not implemented
-- tests: still light overall, but scheduler unit tests now exist
+- tests: still light overall, but scheduler and digest unit tests now exist
+
+## Hosting Direction
+
+The current hosting direction is intentionally single-tenant and self-hosted.
+
+For now, the expected operating model is:
+
+- one app instance per user/operator
+- one Postgres database per app instance
+- user-specific behavior controlled through environment variables
+- no user table, auth, tenancy layer, or notification preferences system yet
+
+The near-term goal is to make the app easy to clone, configure, and run locally or on a small host with minimal setup. Docker packaging, automatic migrations on startup, and a complete `.env.example` are expected next steps in support of that direction.
 
 ## Immediate Next Step
 
-The scheduler is now in place, so the next major feature is likely to be the HTTP/API layer or richer ingest coverage.
+The scheduler, digest plumbing, and first email provider integration are now in place, so the next major feature is likely to be one of:
 
 Natural next implementation areas now look like:
 

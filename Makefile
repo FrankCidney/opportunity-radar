@@ -12,6 +12,9 @@ DIGEST_ENABLED ?= false
 DIGEST_TO_EMAIL ?=
 DIGEST_TOP_N ?= 10
 DIGEST_LOOKBACK ?= 24h
+RESEND_API_KEY ?=
+RESEND_FROM_EMAIL ?=
+RESEND_FROM_NAME ?= Opportunity Radar
 
 # Targets
 .PHONY: migrate-up migrate-down migrate-force migrate-create run run-once run-scheduler-smoke run-test
@@ -46,6 +49,9 @@ run:
 		DIGEST_TO_EMAIL="$(DIGEST_TO_EMAIL)" \
 		DIGEST_TOP_N="$(DIGEST_TOP_N)" \
 		DIGEST_LOOKBACK="$(DIGEST_LOOKBACK)" \
+		RESEND_API_KEY="$(RESEND_API_KEY)" \
+		RESEND_FROM_EMAIL="$(RESEND_FROM_EMAIL)" \
+		RESEND_FROM_NAME="$(RESEND_FROM_NAME)" \
 		go run ./cmd/app
 
 run-once:
@@ -55,6 +61,9 @@ run-once:
 		DIGEST_TO_EMAIL="$(DIGEST_TO_EMAIL)" \
 		DIGEST_TOP_N="$(DIGEST_TOP_N)" \
 		DIGEST_LOOKBACK="$(DIGEST_LOOKBACK)" \
+		RESEND_API_KEY="$(RESEND_API_KEY)" \
+		RESEND_FROM_EMAIL="$(RESEND_FROM_EMAIL)" \
+		RESEND_FROM_NAME="$(RESEND_FROM_NAME)" \
 		go run ./cmd/app
 
 run-scheduler-smoke:
@@ -67,6 +76,9 @@ run-scheduler-smoke:
 		DIGEST_TO_EMAIL="$(DIGEST_TO_EMAIL)" \
 		DIGEST_TOP_N="$(DIGEST_TOP_N)" \
 		DIGEST_LOOKBACK="$(DIGEST_LOOKBACK)" \
+		RESEND_API_KEY="$(RESEND_API_KEY)" \
+		RESEND_FROM_EMAIL="$(RESEND_FROM_EMAIL)" \
+		RESEND_FROM_NAME="$(RESEND_FROM_NAME)" \
 		go run ./cmd/app
 
 run-test:

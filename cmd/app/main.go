@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -57,11 +58,12 @@ func main() {
 	remotiveScraper := remotive.NewScraper(logr)
 
 	ingestService := ingest.NewService(pipeline, []ingest.Scraper{remotiveScraper}, logr)
+	digestSender := buildDigestSender(cfg, logr)
 	digestService := digest.NewService(
 		digestRepo,
 		jobsService,
 		companyService,
-		digest.NewLoggingSender(logr),
+		digestSender,
 		digest.Config{
 			Enabled:   cfg.DigestEnabled,
 			Recipient: cfg.DigestToEmail,
@@ -91,4 +93,23 @@ func main() {
 		logr.Error("scheduler failed", "error", err)
 		os.Exit(1)
 	}
+}
+
+func buildDigestSender(cfg config.Config, logger *slog.Logger) digest.Sender {
+	if cfg.ResendAPIKey == "" || cfg.ResendFromEmail == "" {
+		logger.Info("resend not fully configured; using logging digest sender")
+		return digest.NewLoggingSender(logger)
+	}
+
+	logger.Info("using resend digest sender",
+		"from_email", cfg.ResendFromEmail,
+	)
+
+	return digest.NewResendSender(
+		cfg.ResendAPIKey,
+		cfg.ResendFromEmail,
+		cfg.ResendFromName,
+		nil,
+		logger,
+	)
 }

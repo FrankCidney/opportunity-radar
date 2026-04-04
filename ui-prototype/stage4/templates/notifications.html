@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Title}}</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <div class="scenario-bar">
+    <span>View state:</span>
+    {{range .Scenarios}}
+      <a class="scenario-chip {{if eq $.State.Key .Key}}is-active{{end}}" href="/notifications?scenario={{.Key}}">{{.Label}}</a>
+    {{end}}
+  </div>
+
+  <header class="site-header">
+    <div class="brand">
+      <p class="eyebrow">Email Updates</p>
+      <h1>How results should reach you</h1>
+      <p class="subtitle">Clearer language than “digest”, while still matching the app’s real behavior.</p>
+    </div>
+  </header>
+
+  <nav class="nav-shell">
+    <a class="nav-link" href="{{.Route "/"}}">Home</a>
+    <a class="nav-link" href="{{.Route "/profile"}}">Profile</a>
+    <a class="nav-link is-active" href="{{.Route "/notifications"}}">Email Updates</a>
+  </nav>
+
+  <main class="page-shell">
+    {{if .Flash}}<div class="flash">{{.Flash}}</div>{{end}}
+    {{if .Warnings}}
+      <section class="panel panel-warning">
+        <h2>Attention</h2>
+        <ul class="warning-list">
+          {{range .Warnings}}<li>{{.}}</li>{{end}}
+        </ul>
+      </section>
+    {{end}}
+
+    <section class="panel">
+      <form class="form-grid" method="post" action="{{.Route "/notifications"}}">
+        <label class="field field-inline">
+          <input type="checkbox" name="email_updates_enabled" {{if .State.EmailUpdatesEnabled}}checked{{end}}>
+          <div>
+            <span class="inline-label">Send me email updates after each daily run</span>
+            <small>In the real app, this maps to the daily digest that runs after ingest.</small>
+          </div>
+        </label>
+
+        <label class="field field-wide">
+          <span>Where should updates go?</span>
+          <small>Example: francis@example.com</small>
+          <input type="email" name="email_destination" value="{{.State.EmailDestination}}">
+        </label>
+
+        <label class="field">
+          <span>How many roles should each email include?</span>
+          <small>Example: 10</small>
+          <select name="email_top_n">
+            <option value="5" {{if eq .State.EmailTopN 5}}selected{{end}}>5</option>
+            <option value="10" {{if eq .State.EmailTopN 10}}selected{{end}}>10</option>
+            <option value="15" {{if eq .State.EmailTopN 15}}selected{{end}}>15</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span>How far back should we look?</span>
+          <small>Keep this simple for now.</small>
+          <select name="email_lookback">
+            {{range .EmailLookbackOptions}}
+              <option value="{{.}}" {{if eq $.State.EmailLookback .}}selected{{end}}>{{.}}</option>
+            {{end}}
+          </select>
+        </label>
+
+        <label class="field">
+          <span>Prototype delivery state</span>
+          <small>This is dummy-only so you can preview the warning flow.</small>
+          <select name="email_delivery_configured">
+            <option value="configured" {{if .State.EmailDeliveryConfigured}}selected{{end}}>Email delivery configured</option>
+            <option value="logging" {{if not .State.EmailDeliveryConfigured}}selected{{end}}>Would log instead of sending</option>
+          </select>
+        </label>
+
+        <div class="form-actions">
+          <button class="button button-primary" type="submit">Save email update settings</button>
+        </div>
+      </form>
+    </section>
+  </main>
+</body>
+</html>

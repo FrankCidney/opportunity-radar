@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Title}}</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <div class="scenario-bar">
+    <span>View state:</span>
+    {{range .Scenarios}}
+      <a class="scenario-chip {{if eq $.State.Key .Key}}is-active{{end}}" href="/profile/edit?scenario={{.Key}}">{{.Label}}</a>
+    {{end}}
+  </div>
+
+  <header class="site-header">
+    <div class="brand">
+      <p class="eyebrow">Profile</p>
+      <h1>Edit your search preferences</h1>
+      <p class="subtitle">This keeps the flow grounded in user intent instead of raw keyword jargon.</p>
+    </div>
+  </header>
+
+  <main class="page-shell">
+    <section class="panel">
+      <form class="form-grid" method="post" action="{{.Route "/profile/edit"}}">
+        <label class="field field-wide">
+          <span>What roles are you looking for?</span>
+          <small>Example: Backend engineer, software engineer, platform engineer</small>
+          <textarea name="roles" rows="4">{{.State.Roles}}</textarea>
+        </label>
+
+        <label class="field">
+          <span>What experience level are you at?</span>
+          <small>Choose the level that feels closest today.</small>
+          <select name="experience_level">
+            {{range .ExperienceOptions}}
+              <option value="{{.}}" {{if eq $.State.ExperienceLevel .}}selected{{end}}>{{.}}</option>
+            {{end}}
+          </select>
+        </label>
+
+        <fieldset class="field">
+          <span>Remote, hybrid, or on-site preference</span>
+          <small>You can choose more than one.</small>
+          <div class="check-grid">
+            {{range .WorkModeOptions}}
+              <label class="check-option">
+                <input type="checkbox" name="work_modes" value="{{.}}" {{if contains $.State.WorkModes .}}checked{{end}}>
+                <span>{{.}}</span>
+              </label>
+            {{end}}
+          </div>
+        </fieldset>
+
+        <label class="field field-wide">
+          <span>What skills would you feel comfortable using on the job today?</span>
+          <small>Example: Go, Postgres, Docker</small>
+          <textarea name="current_skills" rows="4">{{.State.CurrentSkills}}</textarea>
+        </label>
+
+        <label class="field field-wide">
+          <span>What skills do you want to grow into?</span>
+          <small>Example: Python, AI/ML, distributed systems</small>
+          <textarea name="growth_skills" rows="4">{{.State.GrowthSkills}}</textarea>
+        </label>
+
+        <fieldset class="field field-wide">
+          <span>Which countries are okay?</span>
+          <small>Choose all that apply. Remote is listed first so you can prefer that without picking a country.</small>
+          <div class="check-grid check-grid-wide">
+            {{range .LocationOptions}}
+              <label class="check-option">
+                <input type="checkbox" name="locations" value="{{.}}" {{if contains $.State.Locations .}}checked{{end}}>
+                <span>{{.}}</span>
+              </label>
+            {{end}}
+          </div>
+        </fieldset>
+
+        <label class="field field-wide">
+          <span>What should be avoided?</span>
+          <small>Example: Senior, manager, sales</small>
+          <textarea name="avoid" rows="4">{{.State.Avoid}}</textarea>
+        </label>
+
+        <div class="form-actions">
+          <button class="button button-primary" type="submit">Save prototype changes</button>
+          <a class="button button-secondary" href="{{.Route "/profile"}}">Cancel</a>
+        </div>
+      </form>
+    </section>
+  </main>
+</body>
+</html>

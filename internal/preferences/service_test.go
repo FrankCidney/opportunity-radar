@@ -1,0 +1,106 @@
+package preferences
+
+import (
+	"context"
+	"errors"
+	"io"
+	"log/slog"
+	"testing"
+	"time"
+)
+
+func TestServiceSaveNormalizesSettings(t *testing.T) {
+	repo := &stubRepository{}
+	service := NewService(repo, slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	err := service.Save(context.Background(), &Settings{
+		RoleKeywords:    []string{" Backend ", "backend", "", "API"},
+		DigestRecipient: "  test@example.com ",
+		DigestTopN:      0,
+		DigestLookback:  0,
+	})
+	if err != nil {
+		t.Fatalf("expected save to succeed: %v", err)
+	}
+
+	if repo.saved == nil {
+		t.Fatalf("expected settings to be saved")
+	}
+
+	if got, want := repo.saved.RoleKeywords, []string{"backend", "api"}; !stringSlicesEqual(got, want) {
+		t.Fatalf("unexpected role keywords: got %v want %v", got, want)
+	}
+
+	if repo.saved.DigestRecipient != "test@example.com" {
+		t.Fatalf("unexpected digest recipient: %q", repo.saved.DigestRecipient)
+	}
+
+	if repo.saved.DigestTopN != 10 {
+		t.Fatalf("unexpected digest top n: got %d want 10", repo.saved.DigestTopN)
+	}
+
+	if repo.saved.DigestLookback != 24*time.Hour {
+		t.Fatalf("unexpected digest lookback: got %s want 24h", repo.saved.DigestLookback)
+	}
+}
+
+func TestServiceEnsureBootstrapsWhenMissing(t *testing.T) {
+	repo := &stubRepository{getErr: ErrNotFound}
+	service := NewService(repo, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	bootstrap := &Settings{
+		RoleKeywords:   []string{"backend"},
+		DigestTopN:     5,
+		DigestLookback: 12 * time.Hour,
+	}
+
+	settings, created, err := service.Ensure(context.Background(), bootstrap)
+	if err != nil {
+		t.Fatalf("expected ensure to succeed: %v", err)
+	}
+	if !created {
+		t.Fatalf("expected settings to be created")
+	}
+	if settings == nil {
+		t.Fatalf("expected settings result")
+	}
+	if got, want := settings.RoleKeywords, []string{"backend"}; !stringSlicesEqual(got, want) {
+		t.Fatalf("unexpected role keywords: got %v want %v", got, want)
+	}
+}
+
+type stubRepository struct {
+	getErr error
+	saved  *Settings
+}
+
+func (r *stubRepository) Get(ctx context.Context) (*Settings, error) {
+	if r.saved != nil {
+		return r.saved, nil
+	}
+	if r.getErr != nil {
+		return nil, r.getErr
+	}
+	return nil, ErrNotFound
+}
+
+func (r *stubRepository) Save(ctx context.Context, settings *Settings) error {
+	if settings == nil {
+		return errors.New("settings must not be nil")
+	}
+	cloned := *settings
+	r.saved = &cloned
+	r.getErr = nil
+	return nil
+}
+
+func stringSlicesEqual(got []string, want []string) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			return false
+		}
+	}
+	return true
+}

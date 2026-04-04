@@ -12,11 +12,16 @@ import (
 
 func main() {
 	// Load config
-	cfg := config.Load()
-	
+	cfg, err := config.Load()
+	if err != nil {
+		logr := logger.New("development")
+		logr.Error("failed to load config", "error", err)
+		return
+	}
+
 	// Initialize structured logger
 	logr := logger.New(cfg.Env)
-	
+
 	scraper := remotive.NewScraper(logr)
 
 	raws, err := scraper.Scrape(context.Background())

@@ -3,6 +3,7 @@ package scoring
 import (
 	"math"
 	"strings"
+	"sync"
 	"time"
 
 	"opportunity-radar/internal/jobs"
@@ -19,6 +20,7 @@ type Profile struct {
 }
 
 type RulesScorer struct {
+	mu      sync.RWMutex
 	profile Profile
 	now     func() time.Time
 }
@@ -38,24 +40,36 @@ func newRulesScorerWithClock(profile Profile, now func() time.Time) *RulesScorer
 }
 
 func (s *RulesScorer) Score(job *jobs.Job) float64 {
+	s.mu.RLock()
+	profile := s.profile
+	nowFn := s.now
+	s.mu.RUnlock()
+
 	title := normalizeText(job.Title)
 	description := normalizeText(job.Description)
 	location := normalizeText(job.Location)
 
 	score := 0.0
 
-	score += weightedMatches(title, description, s.profile.RoleKeywords, 24, 8)
-	score += weightedMatches(title, description, s.profile.SkillKeywords, 14, 5)
-	score += weightedMatches(title, description, s.profile.PreferredLevelKeywords, 16, 5)
-	score += locationMatches(location, description, s.profile.PreferredLocationTerms, 12, 4)
+	score += weightedMatches(title, description, profile.RoleKeywords, 24, 8)
+	score += weightedMatches(title, description, profile.SkillKeywords, 14, 5)
+	score += weightedMatches(title, description, profile.PreferredLevelKeywords, 16, 5)
+	score += locationMatches(location, description, profile.PreferredLocationTerms, 12, 4)
 
-	score -= weightedMatches(title, description, s.profile.PenaltyLevelKeywords, 18, 7)
-	score -= locationMatches(location, description, s.profile.PenaltyLocationTerms, 14, 5)
-	score -= weightedMatches(title, description, s.profile.MismatchKeywords, 16, 6)
+	score -= weightedMatches(title, description, profile.PenaltyLevelKeywords, 18, 7)
+	score -= locationMatches(location, description, profile.PenaltyLocationTerms, 14, 5)
+	score -= weightedMatches(title, description, profile.MismatchKeywords, 16, 6)
 
-	score += freshnessScore(job.PostedAt, s.now())
+	score += freshnessScore(job.PostedAt, nowFn())
 
 	return math.Max(score, 0)
+}
+
+func (s *RulesScorer) SetProfile(profile Profile) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.profile = profile
 }
 
 func normalizeText(value string) string {

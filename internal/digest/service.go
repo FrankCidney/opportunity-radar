@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"opportunity-radar/internal/companies"
@@ -33,6 +34,7 @@ type Service struct {
 	companies CompanyGetter
 	sender    Sender
 	logger    *slog.Logger
+	configMu  sync.RWMutex
 	config    Config
 }
 
@@ -55,14 +57,16 @@ func NewService(
 }
 
 func (s *Service) SendDaily(ctx context.Context, now time.Time) error {
-	if !s.config.Enabled {
+	config := s.CurrentConfig()
+
+	if !config.Enabled {
 		s.logger.Info("daily digest disabled; skipping")
 		return nil
 	}
 	if s.repo == nil || s.jobLister == nil || s.sender == nil {
 		return fmt.Errorf("%w: digest dependencies are not configured", ErrServiceInternal)
 	}
-	if strings.TrimSpace(s.config.Recipient) == "" {
+	if strings.TrimSpace(config.Recipient) == "" {
 		s.logger.Warn("daily digest enabled but recipient is empty; skipping")
 		return nil
 	}
@@ -70,9 +74,9 @@ func (s *Service) SendDaily(ctx context.Context, now time.Time) error {
 	digestDate := startOfUTCDay(now)
 	digestDateKey := digestDate.Format(time.DateOnly)
 
-	if _, err := s.repo.GetByRecipientAndDate(ctx, s.config.Recipient, digestDateKey); err == nil {
+	if _, err := s.repo.GetByRecipientAndDate(ctx, config.Recipient, digestDateKey); err == nil {
 		s.logger.Info("daily digest already sent; skipping",
-			"recipient", s.config.Recipient,
+			"recipient", config.Recipient,
 			"digest_date", digestDateKey,
 		)
 		return nil
@@ -96,25 +100,25 @@ func (s *Service) SendDaily(ctx context.Context, now time.Time) error {
 
 	if len(jobResults) == 0 {
 		s.logger.Info("daily digest skipped because no recent jobs were found",
-			"recipient", s.config.Recipient,
+			"recipient", config.Recipient,
 			"since", lookbackStart,
 		)
 		return nil
 	}
 
 	items := s.buildDigestItems(ctx, jobResults)
-	message := RenderMessage(s.config.Recipient, items)
+	message := RenderMessage(config.Recipient, items)
 
 	if err := s.sender.Send(ctx, message); err != nil {
 		s.logger.Error("failed to send daily digest",
-			"recipient", s.config.Recipient,
+			"recipient", config.Recipient,
 			"error", err,
 		)
 		return fmt.Errorf("%w: sending digest", ErrServiceInternal)
 	}
 
 	delivery := &Delivery{
-		Recipient:  s.config.Recipient,
+		Recipient:  config.Recipient,
 		DigestDate: digestDate,
 		JobCount:   len(items),
 		Subject:    message.Subject,
@@ -123,7 +127,7 @@ func (s *Service) SendDaily(ctx context.Context, now time.Time) error {
 	if err := s.repo.Create(ctx, delivery); err != nil {
 		if errors.Is(err, ErrConflict) {
 			s.logger.Info("daily digest was recorded by another path; treating as already sent",
-				"recipient", s.config.Recipient,
+				"recipient", config.Recipient,
 				"digest_date", digestDateKey,
 			)
 			return nil
@@ -132,7 +136,7 @@ func (s *Service) SendDaily(ctx context.Context, now time.Time) error {
 	}
 
 	s.logger.Info("daily digest complete",
-		"recipient", s.config.Recipient,
+		"recipient", config.Recipient,
 		"digest_date", digestDateKey,
 		"job_count", len(items),
 	)
@@ -173,6 +177,9 @@ func (s *Service) buildDigestItems(ctx context.Context, jobResults []jobs.Job) [
 }
 
 func (s *Service) effectiveTopN() int {
+	s.configMu.RLock()
+	defer s.configMu.RUnlock()
+
 	if s.config.TopN <= 0 {
 		return 10
 	}
@@ -183,10 +190,27 @@ func (s *Service) effectiveTopN() int {
 }
 
 func (s *Service) effectiveLookback() time.Duration {
+	s.configMu.RLock()
+	defer s.configMu.RUnlock()
+
 	if s.config.Lookback <= 0 {
 		return 24 * time.Hour
 	}
 	return s.config.Lookback
+}
+
+func (s *Service) UpdateConfig(config Config) {
+	s.configMu.Lock()
+	defer s.configMu.Unlock()
+
+	s.config = config
+}
+
+func (s *Service) CurrentConfig() Config {
+	s.configMu.RLock()
+	defer s.configMu.RUnlock()
+
+	return s.config
 }
 
 func (s *Service) translateRepositoryError(action string, err error) error {

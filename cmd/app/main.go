@@ -4,9 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"opportunity-radar/internal/companies"
 	"opportunity-radar/internal/digest"
@@ -90,14 +92,47 @@ func main() {
 		logr,
 	)
 	runner := digest.NewRunner(ingestService, digestService, logr)
+	adminHandler := preferences.NewHandler(
+		preferencesService,
+		scorer,
+		digestService,
+		isResendConfigured(cfg),
+		logr,
+	)
+	server := buildHTTPServer(cfg, preferences.Routes(adminHandler))
+
+	serverErrCh := make(chan error, 1)
+	go func() {
+		logr.Info("http server starting", "addr", server.Addr)
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			serverErrCh <- err
+		}
+	}()
+
+	go func() {
+		<-ctx.Done()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			logr.Error("http server shutdown failed", "error", err)
+		}
+	}()
 
 	if !cfg.SchedulerEnabled {
-		logr.Info("scheduler disabled; running ingest once")
+		logr.Info("scheduler disabled; running ingest once and keeping admin server available")
 		if err := runner.RunAll(ctx); err != nil {
 			logr.Error("ingest run failed", "error", err)
 			os.Exit(1)
 		}
-		return
+
+		select {
+		case <-ctx.Done():
+			return
+		case err := <-serverErrCh:
+			logr.Error("http server failed", "error", err)
+			os.Exit(1)
+		}
 	}
 
 	sched := scheduler.New(runner, scheduler.Config{
@@ -106,9 +141,22 @@ func main() {
 		RunTimeout: cfg.SchedulerRunTimeout,
 	}, logr)
 
-	if err := sched.Run(ctx); err != nil {
-		logr.Error("scheduler failed", "error", err)
+	schedulerErrCh := make(chan error, 1)
+	go func() {
+		schedulerErrCh <- sched.Run(ctx)
+	}()
+
+	select {
+	case <-ctx.Done():
+		return
+	case err := <-serverErrCh:
+		logr.Error("http server failed", "error", err)
 		os.Exit(1)
+	case err := <-schedulerErrCh:
+		if err != nil {
+			logr.Error("scheduler failed", "error", err)
+			os.Exit(1)
+		}
 	}
 }
 
@@ -129,6 +177,18 @@ func buildDigestSender(cfg config.Config, logger *slog.Logger) digest.Sender {
 		nil,
 		logger,
 	)
+}
+
+func buildHTTPServer(cfg config.Config, handler http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              ":" + cfg.Port,
+		Handler:           handler,
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+}
+
+func isResendConfigured(cfg config.Config) bool {
+	return cfg.ResendAPIKey != "" && cfg.ResendFromEmail != ""
 }
 
 func defaultSettingsBootstrap(cfg config.Config) *preferences.Settings {

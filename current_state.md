@@ -9,9 +9,9 @@ The project is still early, but the core ingest path is now taking shape:
 - one scraper implementation exists: `remotive`
 - raw jobs are normalized into internal models
 - companies are resolved or created before jobs are saved
-- jobs are scored with a simple rule-based scorer
+- jobs are scored with a weighted profile-driven rule-based scorer
 - jobs and companies both have repository and service layers
-- `cmd/app` can now run ingest on startup, continue on a daily scheduler, and send a daily digest of top-scored jobs through Resend when configured
+- `cmd/app` can now run ingest on startup, continue on a daily scheduler, send a daily digest of top-scored jobs through Resend when configured, and serve a minimal admin/settings HTTP surface
 
 ## What Exists Today
 
@@ -24,6 +24,7 @@ It currently wires together:
 - config loading
 - structured logging
 - PostgreSQL connection
+- persisted app preferences/settings
 - `companies` Postgres repository and service
 - `jobs` Postgres repository and service
 - ingest pipeline
@@ -32,16 +33,25 @@ It currently wires together:
 - digest service
 - digest runner/orchestrator
 - scheduler
+- admin HTTP handlers/routes
 - signal-based shutdown context
 
 The current app entrypoint now:
 
 - builds the service graph
 - creates a root context tied to `SIGINT` / `SIGTERM`
+- starts a minimal admin HTTP server in the same process
 - runs one ingest cycle immediately on startup by default
 - runs the digest workflow after ingest in the same scheduled cycle
 - continues periodic ingest runs every 24 hours by default
 - shuts down cleanly when the process is stopped
+
+The current runtime now also:
+
+- bootstraps a persisted `app_settings` row on first run when one does not yet exist
+- builds the scorer from persisted settings instead of hardcoded values alone
+- builds digest runtime config from persisted settings
+- keeps the admin/settings surface available even when the scheduler is disabled
 
 The current run order for one scheduler cycle is:
 
@@ -184,6 +194,7 @@ Current schema support includes:
 - `companies` table
 - `jobs` table
 - `digest_deliveries` table
+- `app_settings` table
 - uniqueness on job `source + url`
 - newer company fields: `source`, `external_id`, and `domain`
 - uniqueness on digest delivery `recipient + digest_date`
@@ -196,14 +207,16 @@ Repository behavior is structured consistently:
 
 ## Scoring
 
-Scoring is intentionally simple right now.
+Scoring is now more intentional than the original flat keyword counter, but still deterministic and rule-based.
 
 In [rules.go](/home/francis/projects/my-repos/opportunity-radar/internal/scoring/rules.go):
 
-- the score is based on keyword matches in title and description
-- each keyword match adds a fixed score
+- scoring is profile-driven rather than a single flat keyword list
+- title matches are weighted more heavily than description matches
+- scoring considers role fit, skill fit, level fit, location fit, mismatch penalties, and freshness
+- the scorer can be updated at runtime when profile settings change through the admin UI
 
-This is a placeholder heuristic, but it is enough to support ranked ingest output for now.
+This is still a heuristic scorer, but it is much closer to the current product goal of surfacing the most relevant opportunities from noisy inputs.
 
 ## Scrapers
 
@@ -230,6 +243,8 @@ Shared infrastructure currently includes:
 - [service.go](/home/francis/projects/my-repos/opportunity-radar/internal/digest/service.go) for daily digest selection and send tracking
 - [runner.go](/home/francis/projects/my-repos/opportunity-radar/internal/digest/runner.go) for sequencing ingest before digest
 - [sender.go](/home/francis/projects/my-repos/opportunity-radar/internal/digest/sender.go) for digest sender implementations, including Resend and logging fallback
+- [service.go](/home/francis/projects/my-repos/opportunity-radar/internal/preferences/service.go) for persisted app settings
+- [handler.go](/home/francis/projects/my-repos/opportunity-radar/internal/preferences/handler.go) for the minimal admin/settings surface
 
 Scheduler config is now environment-driven. Current settings include:
 
@@ -238,18 +253,35 @@ Scheduler config is now environment-driven. Current settings include:
 - `SCHEDULER_RUN_ON_START` with a default of `true`
 - `SCHEDULER_RUN_TIMEOUT` with a default of `30m`
 
-Digest config is also environment-driven. Current settings include:
-
-- `DIGEST_ENABLED` to turn the digest workflow on or off
-- `DIGEST_TO_EMAIL` for the recipient address
-- `DIGEST_TOP_N` with a default of `10`
-- `DIGEST_LOOKBACK` with a default of `24h`
-
-Resend email delivery is also environment-driven. Current settings include:
+Digest delivery infrastructure is still partially environment-driven. Current settings include:
 
 - `RESEND_API_KEY`
 - `RESEND_FROM_EMAIL`
 - `RESEND_FROM_NAME`
+
+Operator-facing digest preferences are now persisted in `app_settings` and used at runtime:
+
+- digest enabled/disabled
+- digest recipient
+- digest top N
+- digest lookback
+
+Those digest preference values are still bootstrapped from env on first run if no `app_settings` row exists yet, but after bootstrap the app uses the persisted values.
+
+Profile/scoring preferences are also persisted in `app_settings`, including:
+
+- role keywords
+- skill keywords
+- preferred level keywords
+- penalty level keywords
+- preferred location terms
+- penalty location terms
+- mismatch keywords
+
+Config loading behavior is now cleaner than before:
+
+- missing or invalid env values return errors from config loading instead of panicking
+- startup logs config failures and exits cleanly
 
 The codebase consistently uses:
 
@@ -257,6 +289,141 @@ The codebase consistently uses:
 - `context.Context`
 - `log/slog`
 - package-local interfaces where a consumer only needs a narrow contract
+
+## App Behaviour
+
+This section tracks the current runtime behavior of the app, especially the boundary between deployment-controlled behavior and user-editable preferences.
+
+### Runtime Shape
+
+The app now has two long-lived concerns running in the same process:
+
+- the ingest/digest runtime
+- a minimal admin HTTP server for setup and settings
+
+The HTTP/admin surface currently exposes:
+
+- `/`
+- `/setup`
+- `/settings/profile`
+- `/settings/digest`
+
+The admin pages are intentionally simple and server-rendered for now so they can later be replaced or enhanced by a more frontend-focused implementation without needing another backend redesign.
+
+### Normal Run Modes
+
+There are currently two runtime modes:
+
+1. Scheduler-enabled mode
+- controlled by `SCHEDULER_ENABLED=true`
+- the app runs continuously
+- the scheduler executes the normal cycle on its configured interval
+- one cycle currently means: ingest first, then digest
+- the admin HTTP server is also available while the scheduler runs
+
+2. Scheduler-disabled mode
+- controlled by `SCHEDULER_ENABLED=false`
+- the app runs one ingest/digest cycle at startup
+- after that one cycle, the app keeps the admin HTTP server alive instead of exiting immediately
+- this is useful for setup, maintenance, and manual inspection, but it does not schedule future automatic runs
+
+### What The User Can Change In-App
+
+The user can currently change these in the admin UI:
+
+- scoring/profile preferences
+- digest enabled/disabled
+- digest recipient email
+- digest top N
+- digest lookback
+
+These changes are persisted in `app_settings`.
+
+Profile and digest settings are also live-updated in memory:
+
+- profile changes update the running scorer for future ingest runs
+- digest changes update the running digest service for future digest runs
+
+This means the user does not need to restart the app to make future scheduled cycles use updated settings.
+
+One important caveat:
+
+- changing profile settings does not automatically rescore jobs that are already stored in the database
+- updated scoring applies to future ingest runs, not retroactive re-ranking of old jobs
+
+### What Remains Deployment-Controlled
+
+These are currently treated as deployment/runtime concerns and should not be normal user-editable UI settings:
+
+- `DATABASE_URL`
+- `RESEND_API_KEY`
+- `RESEND_FROM_EMAIL`
+- `RESEND_FROM_NAME`
+- `SCHEDULER_ENABLED`
+- `SCHEDULER_INTERVAL`
+- `SCHEDULER_RUN_ON_START`
+- `SCHEDULER_RUN_TIMEOUT`
+
+Current product direction:
+
+- scheduler status should be visible to the user
+- scheduler enable/disable should remain deployment-controlled rather than being toggled in the UI
+
+### Digest Behavior
+
+Current digest behavior:
+
+- if digest is disabled, the digest workflow logs and skips
+- if digest is enabled but no recipient email is set, the digest workflow warns and skips
+- if Resend is not configured, digest sending falls back to the logging sender instead of email delivery
+
+The admin UI should make those states visible to the user.
+
+Current user-visible digest warnings in the admin surface include:
+
+- digest enabled but recipient missing
+- digest enabled but Resend not configured, so digest output will only be logged
+
+Digest selection behavior:
+
+- digest uses the configured `TopN` as a maximum, not a requirement
+- if fewer than `TopN` jobs are available, only the available jobs are included
+- if no jobs are available in the lookback window, the digest is skipped rather than sending an empty digest
+
+Digest duplicate-send behavior:
+
+- sent digests are recorded in `digest_deliveries`
+- duplicate sends for the same recipient and UTC day are skipped
+- this protects against repeated sends during multiple runs on the same day
+
+### Scheduler Visibility And Future UX
+
+One known UX gap remains:
+
+- if the scheduler is disabled, the current admin UI does not yet clearly warn the user that automatic future runs are off
+
+This matters because a user could enable digest or update profile settings and reasonably expect future automated behavior even when `SCHEDULER_ENABLED=false`.
+
+Planned direction:
+
+- scheduler status should be explicitly shown in the UI
+- if the scheduler is off, the UI should warn that settings are saved but automatic runs will not happen
+
+### Manual Run Direction
+
+Current decision direction:
+
+- a future `Run Now` action is desirable
+- this should likely trigger the same cycle as the scheduler: ingest then digest
+- this is especially useful after a user changes profile or digest preferences and wants immediate effect
+
+Current design decision:
+
+- do not expose scheduler on/off as a normal UI control
+- do expose scheduler status in the UI
+- do add a future manual run action in the UI
+
+That keeps deployment/runtime control separate from user preference editing while still giving the user a practical way to act immediately.
 
 ## Architectural Direction
 

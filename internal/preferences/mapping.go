@@ -6,6 +6,12 @@ import (
 	"opportunity-radar/internal/scoring"
 )
 
+type roleFamilyDefinition struct {
+	Terms   []string
+	Aliases []string
+	Tokens  []string
+}
+
 var (
 	ExperienceOptions = []string{
 		"Junior / early-career",
@@ -34,6 +40,72 @@ var (
 	}
 
 	EmailLookbackOptions = []string{"24h", "48h", "72h"}
+
+	roleFamilyOrder = []string{
+		"backend",
+		"software-engineering",
+		"platform",
+		"frontend",
+		"fullstack",
+		"data",
+		"product",
+		"design",
+		"sales",
+		"customer-success",
+	}
+
+	roleFamilies = map[string]roleFamilyDefinition{
+		"backend": {
+			Terms:   []string{"backend", "backend engineer", "backend developer", "api", "server", "services", "microservices"},
+			Aliases: []string{"backend engineer", "backend developer", "api engineer", "api developer", "server-side engineer", "golang backend engineer"},
+			Tokens:  []string{"backend", "api", "server", "services"},
+		},
+		"software-engineering": {
+			Terms:   []string{"software engineer", "software developer", "developer", "engineer"},
+			Aliases: []string{"software engineer", "software developer", "application engineer", "applications engineer"},
+			Tokens:  []string{"software", "engineer", "developer"},
+		},
+		"platform": {
+			Terms:   []string{"platform", "platform engineer", "infrastructure", "devops", "site reliability", "sre"},
+			Aliases: []string{"platform engineer", "infrastructure engineer", "devops engineer", "site reliability engineer", "sre"},
+			Tokens:  []string{"platform", "infrastructure", "devops", "sre", "reliability"},
+		},
+		"frontend": {
+			Terms:   []string{"frontend", "frontend engineer", "frontend developer", "ui", "web"},
+			Aliases: []string{"frontend engineer", "frontend developer", "web engineer", "ui engineer"},
+			Tokens:  []string{"frontend", "ui", "web"},
+		},
+		"fullstack": {
+			Terms:   []string{"fullstack", "full-stack", "full stack", "fullstack engineer", "full stack engineer"},
+			Aliases: []string{"fullstack engineer", "full-stack engineer", "full stack developer"},
+			Tokens:  []string{"fullstack", "full-stack", "full stack"},
+		},
+		"data": {
+			Terms:   []string{"data", "data engineer", "analytics engineer", "etl", "pipelines"},
+			Aliases: []string{"data engineer", "analytics engineer", "data platform engineer"},
+			Tokens:  []string{"data", "analytics", "etl", "pipeline"},
+		},
+		"product": {
+			Terms:   []string{"product manager", "product management", "pm"},
+			Aliases: []string{"product manager", "technical product manager"},
+			Tokens:  []string{"product"},
+		},
+		"design": {
+			Terms:   []string{"designer", "product designer", "ux", "ui", "ux designer", "ui designer"},
+			Aliases: []string{"product designer", "ux designer", "ui designer"},
+			Tokens:  []string{"design", "designer", "ux", "ui"},
+		},
+		"sales": {
+			Terms:   []string{"sales", "account executive", "business development", "bdr", "sdr"},
+			Aliases: []string{"account executive", "sales development representative", "business development representative"},
+			Tokens:  []string{"sales", "account executive", "business development", "bdr", "sdr"},
+		},
+		"customer-success": {
+			Terms:   []string{"customer success", "customer support", "support engineer", "technical support"},
+			Aliases: []string{"customer success manager", "support engineer", "technical support engineer"},
+			Tokens:  []string{"support", "success", "customer"},
+		},
+	}
 )
 
 func (s *Settings) RecalculateDerivedFields() {
@@ -93,20 +165,16 @@ func BuildScoringProfile(s *Settings) scoring.Profile {
 
 func deriveRoleKeywords(roles []string) []string {
 	derived := normalizeStringList(roles)
-
-	roleExpansions := map[string][]string{
-		"backend engineer":   {"backend", "software engineer", "engineer", "api", "platform"},
-		"software engineer":  {"software engineer", "engineer", "developer"},
-		"platform engineer":  {"platform", "engineer", "infrastructure"},
-		"backend developer":  {"backend", "developer", "software developer"},
-		"software developer": {"software developer", "developer"},
+	if len(derived) == 0 {
+		return nil
 	}
 
-	result := make([]string, 0, len(derived)*3)
+	result := make([]string, 0, len(derived)*4)
 	result = append(result, derived...)
+
 	for _, role := range derived {
-		if expansions, ok := roleExpansions[role]; ok {
-			result = append(result, expansions...)
+		for _, family := range matchedRoleFamilies(role) {
+			result = append(result, roleFamilies[family].Terms...)
 		}
 	}
 
@@ -168,5 +236,47 @@ func containsString(values []string, want string) bool {
 			return true
 		}
 	}
+	return false
+}
+
+func matchedRoleFamilies(role string) []string {
+	role = strings.TrimSpace(strings.ToLower(role))
+	if role == "" {
+		return nil
+	}
+
+	matches := make([]string, 0, 2)
+
+	for _, family := range roleFamilyOrder {
+		definition := roleFamilies[family]
+		if roleMatchesFamily(role, definition) {
+			matches = append(matches, family)
+		}
+	}
+
+	if len(matches) == 0 {
+		return nil
+	}
+
+	return normalizeStringList(matches)
+}
+
+func roleMatchesFamily(role string, definition roleFamilyDefinition) bool {
+	for _, alias := range definition.Aliases {
+		if role == strings.ToLower(strings.TrimSpace(alias)) {
+			return true
+		}
+	}
+
+	for _, token := range definition.Tokens {
+		normalized := strings.TrimSpace(strings.ToLower(token))
+		if normalized == "" {
+			continue
+		}
+		if strings.Contains(role, normalized) {
+			return true
+		}
+	}
+
 	return false
 }

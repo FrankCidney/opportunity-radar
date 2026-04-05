@@ -34,7 +34,7 @@ func TestServiceSaveNormalizesSettings(t *testing.T) {
 		t.Fatalf("unexpected desired roles: got %v want %v", got, want)
 	}
 
-	if got, want := repo.saved.RoleKeywords, []string{"backend engineer", "backend", "software engineer", "engineer", "api", "platform"}; !stringSlicesEqual(got, want) {
+	if got, want := repo.saved.RoleKeywords, []string{"backend engineer", "backend", "backend developer", "api", "server", "services", "microservices", "software engineer", "software developer", "developer", "engineer"}; !stringSlicesEqual(got, want) {
 		t.Fatalf("unexpected role keywords: got %v want %v", got, want)
 	}
 
@@ -76,7 +76,7 @@ func TestServiceEnsureBootstrapsWhenMissing(t *testing.T) {
 	if got, want := settings.DesiredRoles, []string{"backend engineer"}; !stringSlicesEqual(got, want) {
 		t.Fatalf("unexpected desired roles: got %v want %v", got, want)
 	}
-	if got, want := settings.RoleKeywords, []string{"backend engineer", "backend", "software engineer", "engineer", "api", "platform"}; !stringSlicesEqual(got, want) {
+	if got, want := settings.RoleKeywords, []string{"backend engineer", "backend", "backend developer", "api", "server", "services", "microservices", "software engineer", "software developer", "developer", "engineer"}; !stringSlicesEqual(got, want) {
 		t.Fatalf("unexpected role keywords: got %v want %v", got, want)
 	}
 }

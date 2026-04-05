@@ -11,7 +11,7 @@ The project is still early, but the core ingest path is now taking shape:
 - companies are resolved or created before jobs are saved
 - jobs are scored with a weighted profile-driven rule-based scorer
 - jobs and companies both have repository and service layers
-- `cmd/app` can now run ingest on startup, continue on a daily scheduler, send a daily digest of top-scored jobs through Resend when configured, and serve a minimal admin/settings HTTP surface
+- `cmd/app` can now run ingest on startup, continue on a daily scheduler, send a daily digest of top-scored jobs through Resend when configured, and serve a preview-based real admin/settings UI
 
 ## What Exists Today
 
@@ -25,6 +25,7 @@ It currently wires together:
 - structured logging
 - PostgreSQL connection
 - persisted app preferences/settings
+- shared run coordination/status
 - `companies` Postgres repository and service
 - `jobs` Postgres repository and service
 - ingest pipeline
@@ -41,6 +42,7 @@ The current app entrypoint now:
 - builds the service graph
 - creates a root context tied to `SIGINT` / `SIGTERM`
 - starts a minimal admin HTTP server in the same process
+- uses a shared run coordinator for both scheduled and manual runs
 - runs one ingest cycle immediately on startup by default
 - runs the digest workflow after ingest in the same scheduled cycle
 - continues periodic ingest runs every 24 hours by default
@@ -51,6 +53,8 @@ The current runtime now also:
 - bootstraps a persisted `app_settings` row on first run when one does not yet exist
 - builds the scorer from persisted settings instead of hardcoded values alone
 - builds digest runtime config from persisted settings
+- derives `SetupComplete` from required onboarding fields instead of treating it as an arbitrary flag
+- supports a manual `Run Once` action through the admin UI
 - keeps the admin/settings surface available even when the scheduler is disabled
 
 The current run order for one scheduler cycle is:
@@ -76,7 +80,7 @@ Current behavior:
 2. The normalizer parses and trims the data into a `NormalizedJob`.
 3. The pipeline asks the company service to `FindOrCreate` the company.
 4. The pipeline builds a `jobs.Job`.
-5. The scorer computes a score from keyword matches.
+5. The scorer computes a score from weighted profile signals.
 6. The job service saves the job.
 
 Pipeline behavior is intentionally resilient:
@@ -270,13 +274,8 @@ Those digest preference values are still bootstrapped from env on first run if n
 
 Profile/scoring preferences are also persisted in `app_settings`, including:
 
-- role keywords
-- skill keywords
-- preferred level keywords
-- penalty level keywords
-- preferred location terms
-- penalty location terms
-- mismatch keywords
+- friendly UI-facing fields such as desired roles, experience level, current skills, growth skills, locations, work modes, and avoid terms
+- derived scoring fields such as role keywords, skill keywords, preferred level keywords, penalty level keywords, preferred location terms, penalty location terms, and mismatch keywords
 
 Config loading behavior is now cleaner than before:
 
@@ -306,9 +305,11 @@ The HTTP/admin surface currently exposes:
 - `/`
 - `/setup`
 - `/settings/profile`
+- `/settings/profile/edit`
 - `/settings/digest`
+- `/run-once`
 
-The admin pages are intentionally simple and server-rendered for now so they can later be replaced or enhanced by a more frontend-focused implementation without needing another backend redesign.
+The admin pages are now server-rendered using the `ui-prototype/preview` layout and styling direction as the real UI baseline.
 
 ### Normal Run Modes
 
@@ -320,18 +321,26 @@ There are currently two runtime modes:
 - the scheduler executes the normal cycle on its configured interval
 - one cycle currently means: ingest first, then digest
 - the admin HTTP server is also available while the scheduler runs
+- manual `Run Once` uses the same run coordinator and does not alter future scheduled behavior
 
 2. Scheduler-disabled mode
 - controlled by `SCHEDULER_ENABLED=false`
 - the app runs one ingest/digest cycle at startup
 - after that one cycle, the app keeps the admin HTTP server alive instead of exiting immediately
 - this is useful for setup, maintenance, and manual inspection, but it does not schedule future automatic runs
+- `Run Once` remains available even when the scheduler is disabled
 
 ### What The User Can Change In-App
 
 The user can currently change these in the admin UI:
 
-- scoring/profile preferences
+- desired roles
+- experience level
+- current skills
+- growth skills
+- locations
+- work mode preferences
+- avoid terms
 - digest enabled/disabled
 - digest recipient email
 - digest top N
@@ -350,6 +359,30 @@ One important caveat:
 
 - changing profile settings does not automatically rescore jobs that are already stored in the database
 - updated scoring applies to future ingest runs, not retroactive re-ranking of old jobs
+
+### Setup Completion Rules
+
+`SetupComplete` is now derived from required onboarding fields.
+
+Current required fields are:
+
+- at least one target role
+- one experience level selection
+- at least one location selection
+- at least one work mode selection
+
+Current optional fields are:
+
+- current skills
+- skills to grow into
+- avoid terms
+- email destination
+- email updates enabled/disabled
+
+Current home-page behavior:
+
+- if required setup fields are incomplete, `/` redirects to `/setup`
+- the user does not reach the normal home/status page until setup is complete
 
 ### What Remains Deployment-Controlled
 
@@ -376,6 +409,7 @@ Current digest behavior:
 - if digest is disabled, the digest workflow logs and skips
 - if digest is enabled but no recipient email is set, the digest workflow warns and skips
 - if Resend is not configured, digest sending falls back to the logging sender instead of email delivery
+- if digest is enabled and no matching jobs are found, the app still sends a status email saying that no new jobs were found
 
 The admin UI should make those states visible to the user.
 
@@ -388,7 +422,7 @@ Digest selection behavior:
 
 - digest uses the configured `TopN` as a maximum, not a requirement
 - if fewer than `TopN` jobs are available, only the available jobs are included
-- if no jobs are available in the lookback window, the digest is skipped rather than sending an empty digest
+- if no jobs are available in the lookback window, the app sends a "no new jobs" status email instead of silently skipping delivery
 
 Digest duplicate-send behavior:
 
@@ -398,32 +432,25 @@ Digest duplicate-send behavior:
 
 ### Scheduler Visibility And Future UX
 
-One known UX gap remains:
+Scheduler status is now shown in the UI and is not a normal user-editable setting.
 
-- if the scheduler is disabled, the current admin UI does not yet clearly warn the user that automatic future runs are off
+Current behavior:
 
-This matters because a user could enable digest or update profile settings and reasonably expect future automated behavior even when `SCHEDULER_ENABLED=false`.
-
-Planned direction:
-
-- scheduler status should be explicitly shown in the UI
-- if the scheduler is off, the UI should warn that settings are saved but automatic runs will not happen
+- if the scheduler is off, the UI warns that automatic future runs are disabled
+- users can still update settings and use `Run Once`
+- scheduler enable/disable remains deployment-controlled rather than UI-controlled
 
 ### Manual Run Direction
 
-Current decision direction:
+Manual run is now part of the real app behavior.
 
-- a future `Run Now` action is desirable
-- this should likely trigger the same cycle as the scheduler: ingest then digest
-- this is especially useful after a user changes profile or digest preferences and wants immediate effect
+Current behavior:
 
-Current design decision:
-
-- do not expose scheduler on/off as a normal UI control
-- do expose scheduler status in the UI
-- do add a future manual run action in the UI
-
-That keeps deployment/runtime control separate from user preference editing while still giving the user a practical way to act immediately.
+- `Run Once` triggers the same cycle as the scheduler: ingest first, then email updates
+- manual runs and scheduled runs share the same single-run guard
+- if a run is already in progress, a second run is not queued in v1
+- instead, the user gets an "already in progress" result
+- the home page shows the latest run result summary and last completed run time
 
 ## Architectural Direction
 

@@ -32,6 +32,13 @@ func (r *PostgresRepository) Get(ctx context.Context) (*Settings, error) {
 	SELECT
 		id,
 		setup_complete,
+		desired_roles,
+		experience_level,
+		current_skills,
+		growth_skills,
+		locations,
+		work_modes,
+		avoid_terms,
 		role_keywords,
 		skill_keywords,
 		preferred_level_keywords,
@@ -57,6 +64,13 @@ func (r *PostgresRepository) Get(ctx context.Context) (*Settings, error) {
 	err := r.db.QueryRowContext(ctx, query, settingsRowID).Scan(
 		&settings.ID,
 		&settings.SetupComplete,
+		pq.Array(&settings.DesiredRoles),
+		&settings.ExperienceLevel,
+		pq.Array(&settings.CurrentSkills),
+		pq.Array(&settings.GrowthSkills),
+		pq.Array(&settings.Locations),
+		pq.Array(&settings.WorkModes),
+		pq.Array(&settings.AvoidTerms),
 		pq.Array(&settings.RoleKeywords),
 		pq.Array(&settings.SkillKeywords),
 		pq.Array(&settings.PreferredLevelKeywords),
@@ -87,6 +101,13 @@ func (r *PostgresRepository) Save(ctx context.Context, settings *Settings) error
 	INSERT INTO app_settings (
 		id,
 		setup_complete,
+		desired_roles,
+		experience_level,
+		current_skills,
+		growth_skills,
+		locations,
+		work_modes,
+		avoid_terms,
 		role_keywords,
 		skill_keywords,
 		preferred_level_keywords,
@@ -102,10 +123,17 @@ func (r *PostgresRepository) Save(ctx context.Context, settings *Settings) error
 		updated_at
 	)
 	VALUES (
-		$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
+		$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22
 	)
 	ON CONFLICT (id) DO UPDATE SET
 		setup_complete = EXCLUDED.setup_complete,
+		desired_roles = EXCLUDED.desired_roles,
+		experience_level = EXCLUDED.experience_level,
+		current_skills = EXCLUDED.current_skills,
+		growth_skills = EXCLUDED.growth_skills,
+		locations = EXCLUDED.locations,
+		work_modes = EXCLUDED.work_modes,
+		avoid_terms = EXCLUDED.avoid_terms,
 		role_keywords = EXCLUDED.role_keywords,
 		skill_keywords = EXCLUDED.skill_keywords,
 		preferred_level_keywords = EXCLUDED.preferred_level_keywords,
@@ -135,6 +163,13 @@ func (r *PostgresRepository) Save(ctx context.Context, settings *Settings) error
 		query,
 		settings.ID,
 		settings.SetupComplete,
+		pq.Array(settings.DesiredRoles),
+		settings.ExperienceLevel,
+		pq.Array(settings.CurrentSkills),
+		pq.Array(settings.GrowthSkills),
+		pq.Array(settings.Locations),
+		pq.Array(settings.WorkModes),
+		pq.Array(settings.AvoidTerms),
 		pq.Array(settings.RoleKeywords),
 		pq.Array(settings.SkillKeywords),
 		pq.Array(settings.PreferredLevelKeywords),

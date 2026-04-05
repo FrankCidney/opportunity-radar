@@ -2,10 +2,13 @@ package scheduler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync/atomic"
 	"time"
+
+	"opportunity-radar/internal/runcontrol"
 )
 
 type Runner interface {
@@ -84,6 +87,10 @@ func (s *Scheduler) runOnce(parentCtx context.Context, trigger string) {
 	s.logger.Info("scheduler run starting", "trigger", trigger, "started_at", startedAt.UTC())
 
 	if err := s.runner.RunAll(runCtx); err != nil {
+		if errors.Is(err, runcontrol.ErrRunInProgress) {
+			s.logger.Warn("scheduler tick skipped; run already in progress", "trigger", trigger)
+			return
+		}
 		s.logger.Error("scheduler run failed",
 			"trigger", trigger,
 			"duration", time.Since(startedAt),

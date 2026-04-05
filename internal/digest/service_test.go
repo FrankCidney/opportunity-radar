@@ -82,7 +82,7 @@ func TestSendDailySkipsWhenAlreadySent(t *testing.T) {
 	}
 }
 
-func TestSendDailySkipsWhenNoJobsFound(t *testing.T) {
+func TestSendDailySendsStatusUpdateWhenNoJobsFound(t *testing.T) {
 	t.Parallel()
 
 	repo := &stubRepository{getErr: ErrNotFound}
@@ -95,11 +95,14 @@ func TestSendDailySkipsWhenNoJobsFound(t *testing.T) {
 	if err := service.SendDaily(context.Background(), time.Now()); err != nil {
 		t.Fatalf("SendDaily() error = %v", err)
 	}
-	if sender.sent {
-		t.Fatal("did not expect sender to be called")
+	if !sender.sent {
+		t.Fatal("expected sender to be called")
 	}
-	if repo.created != nil {
-		t.Fatal("did not expect delivery to be created")
+	if repo.created == nil {
+		t.Fatal("expected delivery to be recorded")
+	}
+	if repo.created.JobCount != 0 {
+		t.Fatalf("expected job count 0, got %d", repo.created.JobCount)
 	}
 }
 

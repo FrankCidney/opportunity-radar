@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Title}}</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="brand">
+      <p class="eyebrow">Profile</p>
+      <h1>Your search preferences</h1>
+      <p class="subtitle">These settings drive future scoring runs. Existing saved jobs are not automatically rescored.</p>
+    </div>
+    <div class="header-actions">
+      <a class="button button-primary" href="/settings/profile/edit">Edit settings</a>
+    </div>
+  </header>
+
+  <nav class="nav-shell">
+    <a class="nav-link" href="/">Home</a>
+    <a class="nav-link is-active" href="/settings/profile">Profile</a>
+    <a class="nav-link" href="/settings/digest">Email Updates</a>
+  </nav>
+
+  <main class="page-shell">
+    {{if .Flash}}<div class="flash">{{.Flash}}</div>{{end}}
+    {{if .Warnings}}
+      <section class="panel panel-warning">
+        <h2>Note</h2>
+        <ul class="warning-list">
+          {{range .Warnings}}<li>{{.}}</li>{{end}}
+        </ul>
+      </section>
+    {{end}}
+
+    <section class="panel">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">What Opportunity Radar should optimize for</p>
+          <h2>{{if .State.SetupComplete}}Setup is complete{{else}}Setup still needs attention{{end}}</h2>
+        </div>
+        {{if not .State.SetupComplete}}<a class="button button-secondary" href="/setup">Finish onboarding</a>{{end}}
+      </div>
+
+      <div class="summary-grid">
+        <article class="summary-card">
+          <h3 class="eyebrow">Roles</h3>
+          <p>{{joinLines .State.DesiredRoles}}</p>
+        </article>
+        <article class="summary-card">
+          <h3 class="eyebrow">Experience level</h3>
+          <p>{{if .State.ExperienceLevel}}{{.State.ExperienceLevel}}{{else}}Not set yet{{end}}</p>
+        </article>
+        <article class="summary-card">
+          <h3 class="eyebrow">Current skills</h3>
+          <p>{{joinLines .State.CurrentSkills}}</p>
+        </article>
+        <article class="summary-card">
+          <h3 class="eyebrow">Skills to grow into</h3>
+          <p>{{joinLines .State.GrowthSkills}}</p>
+        </article>
+        <article class="summary-card">
+          <h3 class="eyebrow">Locations</h3>
+          <p>{{joinLines .State.Locations}}</p>
+        </article>
+        <article class="summary-card">
+          <h3 class="eyebrow">Work mode</h3>
+          <p>{{joinLines .State.WorkModes}}</p>
+        </article>
+        <article class="summary-card summary-card-wide">
+          <h3 class="eyebrow">Avoid</h3>
+          <p>{{joinLines .State.AvoidTerms}}</p>
+        </article>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

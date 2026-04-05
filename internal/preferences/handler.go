@@ -2,9 +2,10 @@ package preferences
 
 import (
 	"context"
+	"embed"
 	"errors"
-	"fmt"
 	"html/template"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -12,8 +13,15 @@ import (
 	"time"
 
 	"opportunity-radar/internal/digest"
+	"opportunity-radar/internal/runcontrol"
 	"opportunity-radar/internal/scoring"
 )
+
+//go:embed templates/*.html
+var templatesFS embed.FS
+
+//go:embed static/*
+var staticFS embed.FS
 
 type SettingsGetterSaver interface {
 	Get(ctx context.Context) (*Settings, error)
@@ -29,27 +37,56 @@ type DigestConfigUpdater interface {
 	CurrentConfig() digest.Config
 }
 
+type RunController interface {
+	RunNow(ctx context.Context) error
+	Status() runcontrol.Status
+}
+
 type Handler struct {
 	service          SettingsGetterSaver
 	scorer           ScoringProfileUpdater
 	digestService    DigestConfigUpdater
+	runController    RunController
 	logger           *slog.Logger
 	resendConfigured bool
+	schedulerEnabled bool
+	scheduleLabel    string
+	templates        *template.Template
+	staticHandler    http.Handler
 }
 
 func NewHandler(
 	service SettingsGetterSaver,
 	scorer ScoringProfileUpdater,
 	digestService DigestConfigUpdater,
+	runController RunController,
 	resendConfigured bool,
+	schedulerEnabled bool,
+	scheduleLabel string,
 	logger *slog.Logger,
 ) *Handler {
+	tmpl := template.Must(template.New("").Funcs(template.FuncMap{
+		"joinLines":     joinLines,
+		"textareaLines": textareaLines,
+		"contains":      contains,
+	}).ParseFS(templatesFS, "templates/*.html"))
+
+	staticRoot, err := fs.Sub(staticFS, "static")
+	if err != nil {
+		panic(err)
+	}
+
 	return &Handler{
 		service:          service,
 		scorer:           scorer,
 		digestService:    digestService,
+		runController:    runController,
 		logger:           logger,
 		resendConfigured: resendConfigured,
+		schedulerEnabled: schedulerEnabled,
+		scheduleLabel:    scheduleLabel,
+		templates:        tmpl,
+		staticHandler:    http.StripPrefix("/static/", http.FileServer(http.FS(staticRoot))),
 	}
 }
 
@@ -61,38 +98,120 @@ func (h *Handler) Home(w http.ResponseWriter, r *http.Request) {
 
 	settings, err := h.loadSettings(r.Context())
 	if err != nil {
-		h.writeError(w, http.StatusInternalServerError, "Failed to load settings", err)
+		h.writeError(w, http.StatusInternalServerError, "failed to load settings", err)
 		return
 	}
 
-	page := statusPageData{
-		Title:            "Opportunity Radar Settings",
-		SetupComplete:    settings.SetupComplete,
-		DigestConfig:     h.digestService.CurrentConfig(),
-		DigestWarnings:   digestWarnings(settings, h.resendConfigured),
-		ResendConfigured: h.resendConfigured,
+	if !settings.SetupComplete {
+		http.Redirect(w, r, "/setup", http.StatusSeeOther)
+		return
 	}
 
-	h.render(w, homeTemplate, page)
+	h.render(w, "index.html", pageData{
+		Title:                "Opportunity Radar",
+		ActiveNav:            "home",
+		State:                settings,
+		Flash:                r.URL.Query().Get("flash"),
+		Warnings:             statusWarnings(settings, h.schedulerEnabled, h.resendConfigured),
+		SchedulerEnabled:     h.schedulerEnabled,
+		ScheduleLabel:        h.scheduleLabel,
+		ResendConfigured:     h.resendConfigured,
+		RunStatus:            h.runStatus(),
+		ExperienceOptions:    ExperienceOptions,
+		WorkModeOptions:      WorkModeOptions,
+		LocationOptions:      LocationOptions,
+		EmailLookbackOptions: EmailLookbackOptions,
+	})
 }
 
 func (h *Handler) Setup(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		h.renderProfileForm(w, r, "/setup", "Initial Setup", "")
+		settings, err := h.loadSettings(r.Context())
+		if err != nil {
+			h.writeError(w, http.StatusInternalServerError, "failed to load settings", err)
+			return
+		}
+		h.render(w, "setup.html", pageData{
+			Title:                "Set Up Opportunity Radar",
+			ActiveNav:            "onboarding",
+			State:                settings,
+			Flash:                r.URL.Query().Get("flash"),
+			Warnings:             onboardingWarnings(settings),
+			SchedulerEnabled:     h.schedulerEnabled,
+			ScheduleLabel:        h.scheduleLabel,
+			ResendConfigured:     h.resendConfigured,
+			RunStatus:            h.runStatus(),
+			ExperienceOptions:    ExperienceOptions,
+			WorkModeOptions:      WorkModeOptions,
+			LocationOptions:      LocationOptions,
+			EmailLookbackOptions: EmailLookbackOptions,
+		})
 	case http.MethodPost:
-		h.handleProfileSave(w, r, true)
+		h.handleSetupSave(w, r)
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
 }
 
 func (h *Handler) ProfileSettings(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	settings, err := h.loadSettings(r.Context())
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "failed to load settings", err)
+		return
+	}
+
+	if !settings.SetupComplete {
+		http.Redirect(w, r, "/setup", http.StatusSeeOther)
+		return
+	}
+
+	h.render(w, "profile.html", pageData{
+		Title:                "Profile",
+		ActiveNav:            "profile",
+		State:                settings,
+		Flash:                r.URL.Query().Get("flash"),
+		Warnings:             []string{"Changes here affect future scoring runs. Existing saved jobs are not automatically rescored."},
+		SchedulerEnabled:     h.schedulerEnabled,
+		ScheduleLabel:        h.scheduleLabel,
+		ResendConfigured:     h.resendConfigured,
+		RunStatus:            h.runStatus(),
+		ExperienceOptions:    ExperienceOptions,
+		WorkModeOptions:      WorkModeOptions,
+		LocationOptions:      LocationOptions,
+		EmailLookbackOptions: EmailLookbackOptions,
+	})
+}
+
+func (h *Handler) ProfileEdit(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		h.renderProfileForm(w, r, "/settings/profile", "Profile Settings", "")
+		settings, err := h.loadSettings(r.Context())
+		if err != nil {
+			h.writeError(w, http.StatusInternalServerError, "failed to load settings", err)
+			return
+		}
+		h.render(w, "profile_edit.html", pageData{
+			Title:                "Edit Profile",
+			ActiveNav:            "profile",
+			State:                settings,
+			Flash:                r.URL.Query().Get("flash"),
+			SchedulerEnabled:     h.schedulerEnabled,
+			ScheduleLabel:        h.scheduleLabel,
+			ResendConfigured:     h.resendConfigured,
+			RunStatus:            h.runStatus(),
+			ExperienceOptions:    ExperienceOptions,
+			WorkModeOptions:      WorkModeOptions,
+			LocationOptions:      LocationOptions,
+			EmailLookbackOptions: EmailLookbackOptions,
+		})
 	case http.MethodPost:
-		h.handleProfileSave(w, r, false)
+		h.handleProfileSave(w, r)
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
@@ -101,7 +220,30 @@ func (h *Handler) ProfileSettings(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) DigestSettings(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		h.renderDigestForm(w, r, "")
+		settings, err := h.loadSettings(r.Context())
+		if err != nil {
+			h.writeError(w, http.StatusInternalServerError, "failed to load settings", err)
+			return
+		}
+		if !settings.SetupComplete {
+			http.Redirect(w, r, "/setup", http.StatusSeeOther)
+			return
+		}
+		h.render(w, "notifications.html", pageData{
+			Title:                "Email Updates",
+			ActiveNav:            "notifications",
+			State:                settings,
+			Flash:                r.URL.Query().Get("flash"),
+			Warnings:             digestWarnings(settings, h.schedulerEnabled, h.resendConfigured),
+			SchedulerEnabled:     h.schedulerEnabled,
+			ScheduleLabel:        h.scheduleLabel,
+			ResendConfigured:     h.resendConfigured,
+			RunStatus:            h.runStatus(),
+			ExperienceOptions:    ExperienceOptions,
+			WorkModeOptions:      WorkModeOptions,
+			LocationOptions:      LocationOptions,
+			EmailLookbackOptions: EmailLookbackOptions,
+		})
 	case http.MethodPost:
 		h.handleDigestSave(w, r)
 	default:
@@ -109,126 +251,138 @@ func (h *Handler) DigestSettings(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *Handler) renderProfileForm(w http.ResponseWriter, r *http.Request, action string, heading string, flash string) {
-	settings, err := h.loadSettings(r.Context())
-	if err != nil {
-		h.writeError(w, http.StatusInternalServerError, "Failed to load profile settings", err)
+func (h *Handler) RunOnce(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
 
-	h.render(w, profileTemplate, profilePageData{
-		Title:              heading,
-		Heading:            heading,
-		Action:             action,
-		Flash:              flash,
-		SetupComplete:      settings.SetupComplete,
-		RoleKeywords:       strings.Join(settings.RoleKeywords, "\n"),
-		SkillKeywords:      strings.Join(settings.SkillKeywords, "\n"),
-		PreferredLevels:    strings.Join(settings.PreferredLevelKeywords, "\n"),
-		PenaltyLevels:      strings.Join(settings.PenaltyLevelKeywords, "\n"),
-		PreferredLocations: strings.Join(settings.PreferredLocationTerms, "\n"),
-		PenaltyLocations:   strings.Join(settings.PenaltyLocationTerms, "\n"),
-		MismatchKeywords:   strings.Join(settings.MismatchKeywords, "\n"),
-	})
+	settings, err := h.loadSettings(r.Context())
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "failed to load settings", err)
+		return
+	}
+	if !settings.SetupComplete {
+		http.Redirect(w, r, "/setup", http.StatusSeeOther)
+		return
+	}
+
+	err = h.runController.RunNow(r.Context())
+	switch {
+	case err == nil:
+		http.Redirect(w, r, "/?flash=Manual+run+started.", http.StatusSeeOther)
+	case errors.Is(err, runcontrol.ErrRunInProgress):
+		http.Redirect(w, r, "/?flash=A+run+is+already+in+progress.+Try+again+in+a+moment.", http.StatusSeeOther)
+	default:
+		h.logger.Error("manual run failed", "error", err)
+		http.Redirect(w, r, "/?flash=Manual+run+failed+to+start.", http.StatusSeeOther)
+	}
 }
 
-func (h *Handler) renderDigestForm(w http.ResponseWriter, r *http.Request, flash string) {
-	settings, err := h.loadSettings(r.Context())
-	if err != nil {
-		h.writeError(w, http.StatusInternalServerError, "Failed to load digest settings", err)
-		return
-	}
-
-	h.render(w, digestTemplate, digestPageData{
-		Title:            "Digest Settings",
-		Flash:            flash,
-		SetupComplete:    settings.SetupComplete,
-		DigestEnabled:    settings.DigestEnabled,
-		DigestRecipient:  settings.DigestRecipient,
-		DigestTopN:       settings.DigestTopN,
-		DigestLookback:   settings.DigestLookback.String(),
-		Warnings:         digestWarnings(settings, h.resendConfigured),
-		ResendConfigured: h.resendConfigured,
-	})
+func (h *Handler) Static(w http.ResponseWriter, r *http.Request) {
+	h.staticHandler.ServeHTTP(w, r)
 }
 
-func (h *Handler) handleProfileSave(w http.ResponseWriter, r *http.Request, markSetupComplete bool) {
+func (h *Handler) handleSetupSave(w http.ResponseWriter, r *http.Request) {
 	settings, err := h.loadSettings(r.Context())
 	if err != nil {
-		h.writeError(w, http.StatusInternalServerError, "Failed to load profile settings", err)
+		h.writeError(w, http.StatusInternalServerError, "failed to load settings", err)
 		return
 	}
-
 	if err := r.ParseForm(); err != nil {
-		h.writeError(w, http.StatusBadRequest, "Invalid form submission", err)
+		h.writeError(w, http.StatusBadRequest, "invalid form submission", err)
 		return
 	}
 
-	settings.RoleKeywords = parseList(r.FormValue("role_keywords"))
-	settings.SkillKeywords = parseList(r.FormValue("skill_keywords"))
-	settings.PreferredLevelKeywords = parseList(r.FormValue("preferred_level_keywords"))
-	settings.PenaltyLevelKeywords = parseList(r.FormValue("penalty_level_keywords"))
-	settings.PreferredLocationTerms = parseList(r.FormValue("preferred_location_terms"))
-	settings.PenaltyLocationTerms = parseList(r.FormValue("penalty_location_terms"))
-	settings.MismatchKeywords = parseList(r.FormValue("mismatch_keywords"))
-	if markSetupComplete {
-		settings.SetupComplete = true
-	}
-
+	populateProfileFromForm(settings, r)
+	settings.DigestRecipient = strings.TrimSpace(r.FormValue("email_destination"))
+	settings.RecalculateDerivedFields()
 	if err := h.service.Save(r.Context(), settings); err != nil {
-		h.writeError(w, http.StatusInternalServerError, "Failed to save profile settings", err)
+		h.writeError(w, http.StatusInternalServerError, "failed to save settings", err)
 		return
 	}
 
-	h.scorer.SetProfile(scoring.Profile{
-		RoleKeywords:           settings.RoleKeywords,
-		SkillKeywords:          settings.SkillKeywords,
-		PreferredLevelKeywords: settings.PreferredLevelKeywords,
-		PenaltyLevelKeywords:   settings.PenaltyLevelKeywords,
-		PreferredLocationTerms: settings.PreferredLocationTerms,
-		PenaltyLocationTerms:   settings.PenaltyLocationTerms,
-		MismatchKeywords:       settings.MismatchKeywords,
-	})
-
-	message := "Profile settings saved."
-	if markSetupComplete {
-		message = "Setup complete. Profile settings saved."
+	h.scorer.SetProfile(BuildScoringProfile(settings))
+	if settings.SetupComplete {
+		http.Redirect(w, r, "/settings/profile?flash=Setup+complete.+You+can+edit+these+settings+any+time.", http.StatusSeeOther)
+		return
 	}
 
-	h.renderProfileForm(w, r, pathForProfile(markSetupComplete), pageHeading(markSetupComplete), message)
+	h.render(w, "setup.html", pageData{
+		Title:                "Set Up Opportunity Radar",
+		ActiveNav:            "onboarding",
+		State:                settings,
+		Flash:                "Setup saved. Finish the required fields to unlock the home page.",
+		Warnings:             append(onboardingWarnings(settings), "Required: roles, experience level, at least one location, and at least one work mode."),
+		SchedulerEnabled:     h.schedulerEnabled,
+		ScheduleLabel:        h.scheduleLabel,
+		ResendConfigured:     h.resendConfigured,
+		RunStatus:            h.runStatus(),
+		ExperienceOptions:    ExperienceOptions,
+		WorkModeOptions:      WorkModeOptions,
+		LocationOptions:      LocationOptions,
+		EmailLookbackOptions: EmailLookbackOptions,
+	})
+}
+
+func (h *Handler) handleProfileSave(w http.ResponseWriter, r *http.Request) {
+	settings, err := h.loadSettings(r.Context())
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "failed to load settings", err)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid form submission", err)
+		return
+	}
+
+	populateProfileFromForm(settings, r)
+	settings.RecalculateDerivedFields()
+	if err := h.service.Save(r.Context(), settings); err != nil {
+		h.writeError(w, http.StatusInternalServerError, "failed to save profile settings", err)
+		return
+	}
+
+	h.scorer.SetProfile(BuildScoringProfile(settings))
+
+	if !settings.SetupComplete {
+		http.Redirect(w, r, "/setup?flash=Your+changes+left+setup+incomplete.+Please+finish+the+required+fields.", http.StatusSeeOther)
+		return
+	}
+
+	http.Redirect(w, r, "/settings/profile?flash=Profile+updated.", http.StatusSeeOther)
 }
 
 func (h *Handler) handleDigestSave(w http.ResponseWriter, r *http.Request) {
 	settings, err := h.loadSettings(r.Context())
 	if err != nil {
-		h.writeError(w, http.StatusInternalServerError, "Failed to load digest settings", err)
+		h.writeError(w, http.StatusInternalServerError, "failed to load settings", err)
 		return
 	}
-
 	if err := r.ParseForm(); err != nil {
-		h.writeError(w, http.StatusBadRequest, "Invalid form submission", err)
+		h.writeError(w, http.StatusBadRequest, "invalid form submission", err)
 		return
 	}
 
-	topN, err := strconv.Atoi(strings.TrimSpace(r.FormValue("digest_top_n")))
+	topN, err := strconv.Atoi(strings.TrimSpace(r.FormValue("email_top_n")))
 	if err != nil {
-		h.writeError(w, http.StatusBadRequest, "Digest Top N must be a valid integer", err)
+		h.writeError(w, http.StatusBadRequest, "email update count must be a valid integer", err)
 		return
 	}
 
-	lookback, err := time.ParseDuration(strings.TrimSpace(r.FormValue("digest_lookback")))
+	lookback, err := time.ParseDuration(strings.TrimSpace(r.FormValue("email_lookback")))
 	if err != nil {
-		h.writeError(w, http.StatusBadRequest, "Digest lookback must be a valid duration", err)
+		h.writeError(w, http.StatusBadRequest, "email lookback must be a valid duration", err)
 		return
 	}
 
-	settings.DigestEnabled = r.FormValue("digest_enabled") == "on"
-	settings.DigestRecipient = strings.TrimSpace(r.FormValue("digest_recipient"))
+	settings.DigestEnabled = r.FormValue("email_updates_enabled") == "on"
+	settings.DigestRecipient = strings.TrimSpace(r.FormValue("email_destination"))
 	settings.DigestTopN = topN
 	settings.DigestLookback = lookback
 
 	if err := h.service.Save(r.Context(), settings); err != nil {
-		h.writeError(w, http.StatusInternalServerError, "Failed to save digest settings", err)
+		h.writeError(w, http.StatusInternalServerError, "failed to save email update settings", err)
 		return
 	}
 
@@ -239,7 +393,7 @@ func (h *Handler) handleDigestSave(w http.ResponseWriter, r *http.Request) {
 		Lookback:  settings.DigestLookback,
 	})
 
-	h.renderDigestForm(w, r, "Digest settings saved.")
+	http.Redirect(w, r, "/settings/digest?flash=Email+update+settings+saved.", http.StatusSeeOther)
 }
 
 func (h *Handler) loadSettings(ctx context.Context) (*Settings, error) {
@@ -250,165 +404,119 @@ func (h *Handler) loadSettings(ctx context.Context) (*Settings, error) {
 		}
 		return nil, err
 	}
-
 	return settings, nil
 }
 
-func (h *Handler) render(w http.ResponseWriter, tmpl string, data any) {
+func (h *Handler) render(w http.ResponseWriter, name string, data pageData) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-
-	t, err := template.New("page").Parse(tmpl)
-	if err != nil {
-		h.logger.Error("failed to parse template", "error", err)
+	if err := h.templates.ExecuteTemplate(w, name, data); err != nil {
+		h.logger.Error("failed to render template", "template", name, "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	if err := t.Execute(w, data); err != nil {
-		h.logger.Error("failed to render template", "error", err)
 	}
 }
 
 func (h *Handler) writeError(w http.ResponseWriter, status int, message string, err error) {
 	h.logger.Error(message, "error", err)
-	http.Error(w, fmt.Sprintf("%s: %v", message, err), status)
+	http.Error(w, message, status)
 }
 
-func parseList(value string) []string {
+func (h *Handler) runStatus() runcontrol.Status {
+	if h.runController == nil {
+		return runcontrol.Status{LastState: "idle"}
+	}
+	return h.runController.Status()
+}
+
+func populateProfileFromForm(settings *Settings, r *http.Request) {
+	settings.DesiredRoles = parseLines(r.FormValue("roles"))
+	settings.ExperienceLevel = strings.TrimSpace(r.FormValue("experience_level"))
+	settings.CurrentSkills = parseLines(r.FormValue("current_skills"))
+	settings.GrowthSkills = parseLines(r.FormValue("growth_skills"))
+	settings.Locations = parseValues(r.Form["locations"])
+	settings.WorkModes = parseValues(r.Form["work_modes"])
+	settings.AvoidTerms = parseLines(r.FormValue("avoid"))
+}
+
+func parseLines(value string) []string {
 	value = strings.ReplaceAll(value, "\r\n", "\n")
 	value = strings.ReplaceAll(value, ",", "\n")
-
 	parts := strings.Split(value, "\n")
-	result := make([]string, 0, len(parts))
-	for _, part := range parts {
-		part = strings.TrimSpace(part)
-		if part == "" {
+	return parseValues(parts)
+}
+
+func parseValues(values []string) []string {
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
 			continue
 		}
-		result = append(result, part)
+		result = append(result, value)
 	}
-
 	return result
 }
 
-func digestWarnings(settings *Settings, resendConfigured bool) []string {
-	warnings := []string{}
+func onboardingWarnings(settings *Settings) []string {
+	if settings.PartialSetup() {
+		return []string{"You already started setup. Your current answers are shown below so you can finish when ready."}
+	}
+	return nil
+}
 
+func statusWarnings(settings *Settings, schedulerEnabled bool, resendConfigured bool) []string {
+	warnings := make([]string, 0, 3)
+	if !schedulerEnabled {
+		warnings = append(warnings, "Automatic runs are turned off. Settings changes are saved, but nothing will run on a schedule.")
+	}
+	return append(warnings, digestWarnings(settings, schedulerEnabled, resendConfigured)...)
+}
+
+func digestWarnings(settings *Settings, schedulerEnabled bool, resendConfigured bool) []string {
+	warnings := []string{}
 	if settings.DigestEnabled && strings.TrimSpace(settings.DigestRecipient) == "" {
-		warnings = append(warnings, "Digest is enabled, but no recipient email is set.")
+		warnings = append(warnings, "Email updates are enabled, but no destination email is set yet.")
 	}
 	if settings.DigestEnabled && !resendConfigured {
-		warnings = append(warnings, "Digest email delivery is not configured. Digests will be logged instead of emailed.")
+		warnings = append(warnings, "Email delivery is not configured. Updates will be logged instead of emailed.")
 	}
-
+	if settings.DigestEnabled && !schedulerEnabled {
+		warnings = append(warnings, "Email updates are enabled, but automatic runs are turned off. Use Run Once or enable the scheduler in deployment config.")
+	}
 	return warnings
 }
 
-func pathForProfile(markSetupComplete bool) string {
-	if markSetupComplete {
-		return "/setup"
+func joinLines(values []string) string {
+	if len(values) == 0 {
+		return "Not set yet"
 	}
-	return "/settings/profile"
+	return strings.Join(values, ", ")
 }
 
-func pageHeading(markSetupComplete bool) string {
-	if markSetupComplete {
-		return "Initial Setup"
+func textareaLines(values []string) string {
+	return strings.Join(values, "\n")
+}
+
+func contains(values []string, want string) bool {
+	for _, value := range values {
+		if strings.EqualFold(value, want) {
+			return true
+		}
 	}
-	return "Profile Settings"
+	return false
 }
 
-type statusPageData struct {
-	Title            string
-	SetupComplete    bool
-	DigestConfig     digest.Config
-	DigestWarnings   []string
-	ResendConfigured bool
+type pageData struct {
+	Title                string
+	ActiveNav            string
+	State                *Settings
+	Flash                string
+	Warnings             []string
+	SchedulerEnabled     bool
+	ScheduleLabel        string
+	ResendConfigured     bool
+	RunStatus            runcontrol.Status
+	ExperienceOptions    []string
+	WorkModeOptions      []string
+	LocationOptions      []string
+	EmailLookbackOptions []string
 }
-
-type profilePageData struct {
-	Title              string
-	Heading            string
-	Action             string
-	Flash              string
-	SetupComplete      bool
-	RoleKeywords       string
-	SkillKeywords      string
-	PreferredLevels    string
-	PenaltyLevels      string
-	PreferredLocations string
-	PenaltyLocations   string
-	MismatchKeywords   string
-}
-
-type digestPageData struct {
-	Title            string
-	Flash            string
-	SetupComplete    bool
-	DigestEnabled    bool
-	DigestRecipient  string
-	DigestTopN       int
-	DigestLookback   string
-	Warnings         []string
-	ResendConfigured bool
-}
-
-const homeTemplate = `<!doctype html>
-<html lang="en">
-<head><meta charset="utf-8"><title>{{.Title}}</title></head>
-<body>
-<h1>{{.Title}}</h1>
-{{if .SetupComplete}}<p>Setup is complete.</p>{{else}}<p>Setup is not complete yet. Visit <a href="/setup">/setup</a> to finish configuring the app.</p>{{end}}
-<p><a href="/setup">Setup</a> | <a href="/settings/profile">Profile Settings</a> | <a href="/settings/digest">Digest Settings</a></p>
-<h2>Digest Status</h2>
-<p>Enabled: {{.DigestConfig.Enabled}}</p>
-<p>Recipient: {{if .DigestConfig.Recipient}}{{.DigestConfig.Recipient}}{{else}}Not set{{end}}</p>
-<p>Email delivery configured: {{.ResendConfigured}}</p>
-{{if .DigestWarnings}}
-<h3>Warnings</h3>
-<ul>{{range .DigestWarnings}}<li>{{.}}</li>{{end}}</ul>
-{{end}}
-</body>
-</html>`
-
-const profileTemplate = `<!doctype html>
-<html lang="en">
-<head><meta charset="utf-8"><title>{{.Title}}</title></head>
-<body>
-<h1>{{.Heading}}</h1>
-<p><a href="/">Home</a> | <a href="/settings/profile">Profile Settings</a> | <a href="/settings/digest">Digest Settings</a></p>
-{{if .Flash}}<p><strong>{{.Flash}}</strong></p>{{end}}
-{{if .SetupComplete}}<p>Setup is complete.</p>{{else}}<p>Setup is not complete yet. Saving this form will complete the profile setup step.</p>{{end}}
-<form method="post" action="{{.Action}}">
-<p><label>Role keywords<br><textarea name="role_keywords" rows="8" cols="40">{{.RoleKeywords}}</textarea></label></p>
-<p><label>Skill keywords<br><textarea name="skill_keywords" rows="8" cols="40">{{.SkillKeywords}}</textarea></label></p>
-<p><label>Preferred level keywords<br><textarea name="preferred_level_keywords" rows="6" cols="40">{{.PreferredLevels}}</textarea></label></p>
-<p><label>Penalty level keywords<br><textarea name="penalty_level_keywords" rows="6" cols="40">{{.PenaltyLevels}}</textarea></label></p>
-<p><label>Preferred location terms<br><textarea name="preferred_location_terms" rows="6" cols="40">{{.PreferredLocations}}</textarea></label></p>
-<p><label>Penalty location terms<br><textarea name="penalty_location_terms" rows="6" cols="40">{{.PenaltyLocations}}</textarea></label></p>
-<p><label>Mismatch keywords<br><textarea name="mismatch_keywords" rows="6" cols="40">{{.MismatchKeywords}}</textarea></label></p>
-<p><button type="submit">Save Profile Settings</button></p>
-</form>
-</body>
-</html>`
-
-const digestTemplate = `<!doctype html>
-<html lang="en">
-<head><meta charset="utf-8"><title>{{.Title}}</title></head>
-<body>
-<h1>{{.Title}}</h1>
-<p><a href="/">Home</a> | <a href="/settings/profile">Profile Settings</a> | <a href="/settings/digest">Digest Settings</a></p>
-{{if .Flash}}<p><strong>{{.Flash}}</strong></p>{{end}}
-{{if .Warnings}}
-<h2>Warnings</h2>
-<ul>{{range .Warnings}}<li>{{.}}</li>{{end}}</ul>
-{{end}}
-<form method="post" action="/settings/digest">
-<p><label><input type="checkbox" name="digest_enabled" {{if .DigestEnabled}}checked{{end}}> Enable digest</label></p>
-<p><label>Recipient email<br><input type="email" name="digest_recipient" value="{{.DigestRecipient}}" size="40"></label></p>
-<p><label>Top N jobs<br><input type="number" name="digest_top_n" value="{{.DigestTopN}}" min="1" max="100"></label></p>
-<p><label>Lookback duration<br><input type="text" name="digest_lookback" value="{{.DigestLookback}}"></label></p>
-<p><button type="submit">Save Digest Settings</button></p>
-</form>
-</body>
-</html>`

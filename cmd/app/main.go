@@ -15,6 +15,7 @@ import (
 	"opportunity-radar/internal/ingest"
 	"opportunity-radar/internal/jobs"
 	"opportunity-radar/internal/preferences"
+	"opportunity-radar/internal/runcontrol"
 	"opportunity-radar/internal/scheduler"
 	"opportunity-radar/internal/scoring"
 	"opportunity-radar/internal/scrapers/remotive"
@@ -76,7 +77,7 @@ func main() {
 		logr.Warn("app settings are not marked complete yet; using bootstrap settings until setup UI is added")
 	}
 
-	scorer := scoring.NewRulesScorer(toScoringProfile(settings))
+	scorer := scoring.NewRulesScorer(preferences.BuildScoringProfile(settings))
 	pipeline := ingest.NewPipeline(scorer, jobsService, companyService, logr)
 
 	remotiveScraper := remotive.NewScraper(logr)
@@ -91,12 +92,16 @@ func main() {
 		toDigestConfig(settings),
 		logr,
 	)
-	runner := digest.NewRunner(ingestService, digestService, logr)
+	digestRunner := digest.NewRunner(ingestService, digestService, logr)
+	runCoordinator := runcontrol.New(digestRunner, logr)
 	adminHandler := preferences.NewHandler(
 		preferencesService,
 		scorer,
 		digestService,
+		runCoordinator,
 		isResendConfigured(cfg),
+		cfg.SchedulerEnabled,
+		scheduleLabel(cfg),
 		logr,
 	)
 	server := buildHTTPServer(cfg, preferences.Routes(adminHandler))
@@ -121,7 +126,7 @@ func main() {
 
 	if !cfg.SchedulerEnabled {
 		logr.Info("scheduler disabled; running ingest once and keeping admin server available")
-		if err := runner.RunAll(ctx); err != nil {
+		if err := runCoordinator.RunAll(ctx); err != nil {
 			logr.Error("ingest run failed", "error", err)
 			os.Exit(1)
 		}
@@ -135,7 +140,7 @@ func main() {
 		}
 	}
 
-	sched := scheduler.New(runner, scheduler.Config{
+	sched := scheduler.New(runCoordinator, scheduler.Config{
 		Interval:   cfg.SchedulerInterval,
 		RunOnStart: cfg.SchedulerRunOnStart,
 		RunTimeout: cfg.SchedulerRunTimeout,
@@ -192,89 +197,23 @@ func isResendConfigured(cfg config.Config) bool {
 }
 
 func defaultSettingsBootstrap(cfg config.Config) *preferences.Settings {
-	return &preferences.Settings{
-		SetupComplete: false,
-		RoleKeywords: []string{
-			"backend",
-			"back end",
-			"software engineer",
-			"software developer",
-			"developer",
-			"engineer",
-			"api",
-			"platform",
-		},
-		SkillKeywords: []string{
-			"go",
-			"golang",
-			"postgres",
-			"sql",
-			"docker",
-			"kubernetes",
-			"microservices",
-			"distributed systems",
-			"grpc",
-			"rest",
-		},
-		PreferredLevelKeywords: []string{
-			"junior",
-			"entry level",
-			"entry-level",
-			"graduate",
-			"new grad",
-			"intern",
-			"associate",
-		},
-		PenaltyLevelKeywords: []string{
-			"senior",
-			"staff",
-			"principal",
-			"lead",
-			"manager",
-			"director",
-			"head of",
-		},
-		PreferredLocationTerms: []string{
-			"remote",
-			"anywhere",
-			"worldwide",
-			"distributed",
-		},
-		PenaltyLocationTerms: []string{
-			"on-site",
-			"onsite",
-			"in office",
-			"relocation required",
-		},
-		MismatchKeywords: []string{
-			"sales",
-			"account executive",
-			"customer success",
-			"recruiter",
-			"marketing",
-			"designer",
-		},
+	settings := &preferences.Settings{
+		SetupComplete:   false,
+		DesiredRoles:    []string{"backend engineer", "software engineer"},
+		ExperienceLevel: "Junior / early-career",
+		CurrentSkills:   []string{"go", "postgres", "docker"},
+		GrowthSkills:    []string{"python", "ai/ml"},
+		Locations:       []string{"remote", "kenya"},
+		WorkModes:       []string{"remote", "hybrid"},
+		AvoidTerms:      []string{"senior", "manager", "sales"},
 		DigestEnabled:   cfg.DigestEnabled,
 		DigestRecipient: cfg.DigestToEmail,
 		DigestTopN:      cfg.DigestTopN,
 		DigestLookback:  cfg.DigestLookback,
 	}
-}
-
-func toScoringProfile(settings *preferences.Settings) scoring.Profile {
-	if settings == nil {
-		return scoring.Profile{}
-	}
-
-	return scoring.Profile{
-		RoleKeywords:           settings.RoleKeywords,
-		SkillKeywords:          settings.SkillKeywords,
-		PreferredLevelKeywords: settings.PreferredLevelKeywords,
-		PenaltyLevelKeywords:   settings.PenaltyLevelKeywords,
-		PreferredLocationTerms: settings.PreferredLocationTerms,
-		PenaltyLocationTerms:   settings.PenaltyLocationTerms,
-		MismatchKeywords:       settings.MismatchKeywords,
-	}
+	settings.RecalculateDerivedFields()
+	settings.SetupComplete = false
+	return settings
 }
 
 func toDigestConfig(settings *preferences.Settings) digest.Config {
@@ -288,4 +227,11 @@ func toDigestConfig(settings *preferences.Settings) digest.Config {
 		TopN:      settings.DigestTopN,
 		Lookback:  settings.DigestLookback,
 	}
+}
+
+func scheduleLabel(cfg config.Config) string {
+	if !cfg.SchedulerEnabled {
+		return "Automatic runs are turned off"
+	}
+	return "Every " + cfg.SchedulerInterval.String()
 }

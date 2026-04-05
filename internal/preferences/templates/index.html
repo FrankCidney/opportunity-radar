@@ -7,31 +7,24 @@
   <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
-  <div class="scenario-bar">
-    <span>View state:</span>
-    {{range .Scenarios}}
-      <a class="scenario-chip {{if eq $.State.Key .Key}}is-active{{end}}" href="{{$.ScenarioRoute "/" .Key}}">{{.Label}}</a>
-    {{end}}
-  </div>
-
   <header class="site-header">
     <div class="brand">
-      <p class="eyebrow">Operator Console Prototype</p>
+      <p class="eyebrow">Operator Console</p>
       <h1>Opportunity Radar</h1>
       <p class="subtitle">A calm control panel for shaping the roles you actually want to see.</p>
     </div>
     <div class="header-actions">
-      <form method="post" action="{{.Route "/run-once"}}">
+      <form method="post" action="/run-once">
         <button class="button button-primary" type="submit">Run Once</button>
       </form>
     </div>
   </header>
 
   <nav class="nav-shell">
-    <a class="nav-link {{if .IsActive "home"}}is-active{{end}}" href="{{.Route "/"}}">Home</a>
-    <a class="nav-link {{if .IsActive "profile"}}is-active{{end}}" href="{{.Route "/profile"}}">Profile</a>
-    <a class="nav-link {{if .IsActive "notifications"}}is-active{{end}}" href="{{.Route "/notifications"}}">Email Updates</a>
-    <a class="nav-link {{if .IsActive "onboarding"}}is-active{{end}}" href="{{.Route "/onboarding"}}">Onboarding</a>
+    <a class="nav-link {{if eq .ActiveNav "home"}}is-active{{end}}" href="/">Home</a>
+    <a class="nav-link {{if eq .ActiveNav "profile"}}is-active{{end}}" href="/settings/profile">Profile</a>
+    <a class="nav-link {{if eq .ActiveNav "notifications"}}is-active{{end}}" href="/settings/digest">Email Updates</a>
+    <a class="nav-link {{if eq .ActiveNav "onboarding"}}is-active{{end}}" href="/setup">Onboarding</a>
   </nav>
 
   <main class="page-shell">
@@ -48,8 +41,8 @@
     <section class="hero-grid">
       <article class="panel">
         <p class="eyebrow">Current status</p>
-        <h2>{{if .State.SchedulerEnabled}}Automatic runs are active{{else}}Automatic runs are paused{{end}}</h2>
-        <p class="lead">{{.State.ScheduleLabel}}</p>
+        <h2>{{if .SchedulerEnabled}}Automatic runs are active{{else}}Automatic runs are paused{{end}}</h2>
+        <p class="lead">{{.ScheduleLabel}}</p>
         <div class="status-grid">
           <div class="status-card">
             <span class="status-label">Setup</span>
@@ -57,27 +50,27 @@
           </div>
           <div class="status-card">
             <span class="status-label">Email updates</span>
-            <strong>{{if .State.EmailUpdatesEnabled}}On{{else}}Off{{end}}</strong>
+            <strong>{{if .State.DigestEnabled}}On{{else}}Off{{end}}</strong>
           </div>
           <div class="status-card">
             <span class="status-label">Last run</span>
-            <strong>{{.State.LastRunAt}}</strong>
+            <strong>{{if .RunStatus.LastCompletedAt.IsZero}}No runs yet{{else}}{{.RunStatus.LastCompletedAt.Format "2006-01-02 15:04 UTC"}}{{end}}</strong>
           </div>
           <div class="status-card">
-            <span class="status-label">Last update email</span>
-            <strong>{{.State.LastDigestAt}}</strong>
+            <span class="status-label">Last result</span>
+            <strong>{{if .RunStatus.LastSummary}}{{.RunStatus.LastSummary}}{{else}}Idle{{end}}</strong>
           </div>
         </div>
       </article>
 
       <article class="panel panel-accent">
         <p class="eyebrow">What the app is aiming for</p>
-        <h2>{{if .State.Roles}}{{index (splitLines .State.Roles) 0}}{{else}}No role focus saved yet{{end}}</h2>
-        <p class="lead">Experience level: {{.State.ExperienceLevel}}</p>
+        <h2>{{if .State.DesiredRoles}}{{index .State.DesiredRoles 0}}{{else}}No role focus saved yet{{end}}</h2>
+        <p class="lead">Experience level: {{if .State.ExperienceLevel}}{{.State.ExperienceLevel}}{{else}}Not set yet{{end}}</p>
         <div class="pill-row">
-          {{range splitLines .State.CurrentSkills}}<span class="pill">{{.}}</span>{{end}}
+          {{range .State.CurrentSkills}}<span class="pill">{{.}}</span>{{end}}
         </div>
-        <p class="helper" style="margin-top: 1.5rem; font-size: 0.85rem;">This prototype uses dummy data only. The goal is to preview the flow and the language, not real persistence.</p>
+        <p class="helper" style="margin-top: 1.5rem; font-size: 0.85rem;">Profile edits affect future runs. Existing saved jobs are not automatically rescored.</p>
       </article>
     </section>
 
@@ -92,7 +85,7 @@
         <dl class="summary-list">
           <div>
             <dt>Roles</dt>
-            <dd>{{joinLines .State.Roles}}</dd>
+            <dd>{{joinLines .State.DesiredRoles}}</dd>
           </div>
           <div>
             <dt>Locations</dt>
@@ -104,11 +97,11 @@
           </div>
           <div>
             <dt>Avoid</dt>
-            <dd>{{joinLines .State.Avoid}}</dd>
+            <dd>{{joinLines .State.AvoidTerms}}</dd>
           </div>
         </dl>
         <div class="card-action">
-          <a class="button button-secondary" href="{{.Route "/profile"}}">View Profile</a>
+          <a class="button button-secondary" href="/settings/profile">View Profile</a>
         </div>
       </article>
 
@@ -122,23 +115,23 @@
         <dl class="summary-list">
           <div>
             <dt>Destination</dt>
-            <dd>{{if .State.EmailDestination}}{{.State.EmailDestination}}{{else}}Not set yet{{end}}</dd>
+            <dd>{{if .State.DigestRecipient}}{{.State.DigestRecipient}}{{else}}Not set yet{{end}}</dd>
           </div>
           <div>
             <dt>Top roles per send</dt>
-            <dd>{{.State.EmailTopN}}</dd>
+            <dd>{{.State.DigestTopN}}</dd>
           </div>
           <div>
             <dt>Lookback window</dt>
-            <dd>{{.State.EmailLookback}}</dd>
+            <dd>{{.State.DigestLookback}}</dd>
           </div>
           <div>
             <dt>Delivery mode</dt>
-            <dd>{{if .State.EmailDeliveryConfigured}}Real email configured{{else}}Would log instead of sending{{end}}</dd>
+            <dd>{{if .ResendConfigured}}Real email configured{{else}}Would log instead of sending{{end}}</dd>
           </div>
         </dl>
         <div class="card-action">
-          <a class="button button-secondary" href="{{.Route "/notifications"}}">Email Updates</a>
+          <a class="button button-secondary" href="/settings/digest">Email Updates</a>
         </div>
       </article>
     </section>

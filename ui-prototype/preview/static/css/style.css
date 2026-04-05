@@ -249,6 +249,16 @@ h3 { font-size: 1.1rem; }
   margin-bottom: 1.5rem;
 }
 
+.feature-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.card-action {
+  margin-top: auto;
+  padding-top: 1.5rem;
+}
+
 .summary-list {
   display: grid;
   gap: 1.25rem;

@@ -40,6 +40,7 @@ func (s *Service) Get(ctx context.Context) (*Settings, error) {
 
 func (s *Service) Save(ctx context.Context, settings *Settings) error {
 	normalized := normalizeSettings(settings)
+	normalized.RecalculateDerivedFields()
 
 	if err := s.repo.Save(ctx, normalized); err != nil {
 		switch {
@@ -87,6 +88,13 @@ func normalizeSettings(input *Settings) *Settings {
 	return &Settings{
 		ID:                     input.ID,
 		SetupComplete:          input.SetupComplete,
+		DesiredRoles:           normalizeStringList(input.DesiredRoles),
+		ExperienceLevel:        strings.TrimSpace(input.ExperienceLevel),
+		CurrentSkills:          normalizeStringList(input.CurrentSkills),
+		GrowthSkills:           normalizeStringList(input.GrowthSkills),
+		Locations:              normalizeStringList(input.Locations),
+		WorkModes:              normalizeStringList(input.WorkModes),
+		AvoidTerms:             normalizeStringList(input.AvoidTerms),
 		RoleKeywords:           normalizeStringList(input.RoleKeywords),
 		SkillKeywords:          normalizeStringList(input.SkillKeywords),
 		PreferredLevelKeywords: normalizeStringList(input.PreferredLevelKeywords),

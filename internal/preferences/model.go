@@ -5,6 +5,13 @@ import "time"
 type Settings struct {
 	ID                     int64
 	SetupComplete          bool
+	DesiredRoles           []string
+	ExperienceLevel        string
+	CurrentSkills          []string
+	GrowthSkills           []string
+	Locations              []string
+	WorkModes              []string
+	AvoidTerms             []string
 	RoleKeywords           []string
 	SkillKeywords          []string
 	PreferredLevelKeywords []string

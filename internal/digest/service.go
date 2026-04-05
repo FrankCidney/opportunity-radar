@@ -28,6 +28,12 @@ type Config struct {
 	Lookback  time.Duration
 }
 
+type Result struct {
+	Outcome  string
+	Summary  string
+	JobCount int
+}
+
 type Service struct {
 	repo      Repository
 	jobLister JobLister
@@ -57,18 +63,23 @@ func NewService(
 }
 
 func (s *Service) SendDaily(ctx context.Context, now time.Time) error {
+	_, err := s.SendDailyResult(ctx, now)
+	return err
+}
+
+func (s *Service) SendDailyResult(ctx context.Context, now time.Time) (Result, error) {
 	config := s.CurrentConfig()
 
 	if !config.Enabled {
 		s.logger.Info("daily digest disabled; skipping")
-		return nil
+		return Result{Outcome: "disabled", Summary: "Email updates are turned off."}, nil
 	}
 	if s.repo == nil || s.jobLister == nil || s.sender == nil {
-		return fmt.Errorf("%w: digest dependencies are not configured", ErrServiceInternal)
+		return Result{}, fmt.Errorf("%w: digest dependencies are not configured", ErrServiceInternal)
 	}
 	if strings.TrimSpace(config.Recipient) == "" {
 		s.logger.Warn("daily digest enabled but recipient is empty; skipping")
-		return nil
+		return Result{Outcome: "missing_recipient", Summary: "Email updates are enabled, but no destination email is set."}, nil
 	}
 
 	digestDate := startOfUTCDay(now)
@@ -79,9 +90,9 @@ func (s *Service) SendDaily(ctx context.Context, now time.Time) error {
 			"recipient", config.Recipient,
 			"digest_date", digestDateKey,
 		)
-		return nil
+		return Result{Outcome: "already_sent", Summary: "Today's email update was already sent."}, nil
 	} else if !errors.Is(err, ErrNotFound) {
-		return s.translateRepositoryError("checking existing digest", err)
+		return Result{}, s.translateRepositoryError("checking existing digest", err)
 	}
 
 	active := jobs.StatusActive
@@ -95,32 +106,71 @@ func (s *Service) SendDaily(ctx context.Context, now time.Time) error {
 		SortBy:       jobs.JobSortScoreDesc,
 	})
 	if err != nil {
-		return fmt.Errorf("%w: listing digest jobs", ErrServiceInternal)
+		return Result{}, fmt.Errorf("%w: listing digest jobs", ErrServiceInternal)
 	}
 
+	var message Message
 	if len(jobResults) == 0 {
-		s.logger.Info("daily digest skipped because no recent jobs were found",
+		s.logger.Info("daily digest found no recent jobs; sending empty status update",
 			"recipient", config.Recipient,
 			"since", lookbackStart,
 		)
-		return nil
-	}
+		message = RenderNoJobsMessage(config.Recipient)
+	} else {
+		items := s.buildDigestItems(ctx, jobResults)
+		message = RenderMessage(config.Recipient, items)
 
-	items := s.buildDigestItems(ctx, jobResults)
-	message := RenderMessage(config.Recipient, items)
+		if err := s.sender.Send(ctx, message); err != nil {
+			s.logger.Error("failed to send daily digest",
+				"recipient", config.Recipient,
+				"error", err,
+			)
+			return Result{}, fmt.Errorf("%w: sending digest", ErrServiceInternal)
+		}
+
+		delivery := &Delivery{
+			Recipient:  config.Recipient,
+			DigestDate: digestDate,
+			JobCount:   len(items),
+			Subject:    message.Subject,
+		}
+
+		if err := s.repo.Create(ctx, delivery); err != nil {
+			if errors.Is(err, ErrConflict) {
+				s.logger.Info("daily digest was recorded by another path; treating as already sent",
+					"recipient", config.Recipient,
+					"digest_date", digestDateKey,
+				)
+				return Result{Outcome: "already_sent", Summary: "Today's email update was already sent."}, nil
+			}
+			return Result{}, s.translateRepositoryError("recording sent digest", err)
+		}
+
+		s.logger.Info("daily digest complete",
+			"recipient", config.Recipient,
+			"digest_date", digestDateKey,
+			"job_count", len(items),
+		)
+
+		return Result{
+			Outcome:  "sent",
+			Summary:  fmt.Sprintf("Run completed and sent %d job update(s).", len(items)),
+			JobCount: len(items),
+		}, nil
+	}
 
 	if err := s.sender.Send(ctx, message); err != nil {
 		s.logger.Error("failed to send daily digest",
 			"recipient", config.Recipient,
 			"error", err,
 		)
-		return fmt.Errorf("%w: sending digest", ErrServiceInternal)
+		return Result{}, fmt.Errorf("%w: sending digest", ErrServiceInternal)
 	}
 
 	delivery := &Delivery{
 		Recipient:  config.Recipient,
 		DigestDate: digestDate,
-		JobCount:   len(items),
+		JobCount:   0,
 		Subject:    message.Subject,
 	}
 
@@ -130,18 +180,22 @@ func (s *Service) SendDaily(ctx context.Context, now time.Time) error {
 				"recipient", config.Recipient,
 				"digest_date", digestDateKey,
 			)
-			return nil
+			return Result{Outcome: "already_sent", Summary: "Today's email update was already sent."}, nil
 		}
-		return s.translateRepositoryError("recording sent digest", err)
+		return Result{}, s.translateRepositoryError("recording sent digest", err)
 	}
 
 	s.logger.Info("daily digest complete",
 		"recipient", config.Recipient,
 		"digest_date", digestDateKey,
-		"job_count", len(items),
+		"job_count", 0,
 	)
 
-	return nil
+	return Result{
+		Outcome:  "no_jobs",
+		Summary:  "Run completed. No new jobs were found, and an email update was still sent.",
+		JobCount: 0,
+	}, nil
 }
 
 func (s *Service) buildDigestItems(ctx context.Context, jobResults []jobs.Job) []JobDigestItem {

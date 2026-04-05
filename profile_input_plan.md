@@ -115,6 +115,73 @@ Example future scenario:
 - the user updates profile settings in the app
 - future ingest cycles score AI/Python roles appropriately
 
+### Stage 4 Sub-Steps And Remaining Integration Work
+
+#### 4A. Real UI Integration
+- integrate the chosen `ui-prototype/preview` layout into the real app
+- preserve the current backend route responsibilities while replacing the placeholder Stage 3 presentation layer
+- keep the visual direction from the preview prototype as the styling baseline
+
+#### 4B. Define What "Setup Complete" Means
+- decide which onboarding fields are required for setup completion
+- make this explicit in both the backend and the UI
+- avoid a vague or inconsistent `SetupComplete` state
+
+Important current decision:
+- not every field needs to be mandatory immediately during prototype work
+- but the real app should eventually have a clear rule for when onboarding is complete
+
+#### 4C. Map Friendly UI Inputs To Real App Settings
+- decide how the user-friendly UI controls map to the persisted settings model and scoring inputs
+- confirm what stays as a simple UI control versus what becomes first-class persisted data
+
+This especially affects:
+- experience level
+- work mode selection
+- country/location selection
+- user-entered role/skill intent
+
+#### 4D. Surface Runtime Status Clearly
+- show scheduler status in the real UI
+- show whether setup is complete
+- show whether email updates are enabled
+- show whether email delivery is configured or log-only
+
+Important current product decision:
+- scheduler status should be visible
+- scheduler enable/disable should remain deployment-controlled, not a normal UI toggle
+
+#### 4E. Define The Real `Run Now` UX
+- add a manual `Run Now` action in the real UI
+- make clear that it should trigger the same cycle as scheduled execution: ingest first, then email updates
+- show that using `Run Now` does not turn the scheduler off or alter future scheduled behavior
+
+Important follow-up questions to resolve during implementation:
+- what happens if a scheduled run is already in progress
+- how success/failure/progress should be communicated back to the user
+- whether the first version needs a queued/running/completed state in the UI
+
+#### 4F. Call Out Current Scoring Limitation In The UI
+- changing profile settings updates future scoring runs
+- existing persisted jobs are not automatically rescored
+
+The UI should avoid implying that profile edits instantly rerank historical jobs unless or until a real rescore feature exists.
+
+Current status:
+- Stage 4 is now substantially implemented
+- the real app uses the `ui-prototype/preview` layout and styling baseline
+- the real app now has onboarding, profile summary/editing, email update settings, and a real `Run Once` action
+- `/` redirects to `/setup` until required onboarding fields are complete
+- required fields are currently:
+  - at least one target role
+  - one experience level selection
+  - at least one location selection
+  - at least one work mode selection
+- scheduler status is visible in the real UI
+- scheduler enable/disable remains deployment-controlled
+- manual runs and scheduled runs now share a single-run guard
+- if email updates are enabled and no matching jobs are found, the app now still sends a status email saying so
+
 ## Stage 5: Add Deterministic Profile Translation
 
 Goal:
@@ -132,6 +199,53 @@ Examples:
 Notes:
 - start deterministic before introducing LLM dependence
 - keep the structured profile as the source of truth
+
+### Stage 5 Sub-Steps And Translation Decisions
+
+#### 5A. Translate Friendly Inputs Into Scoring Inputs
+- add a deterministic mapping layer from UI-facing choices into the scoring profile the backend actually uses
+- keep the user experience high-level while the scorer continues to work with explicit profile terms
+
+Examples:
+- a role choice like `backend engineer` can expand into backend-related role keywords
+- an experience level choice like `Junior / early-career` can expand into preferred level and penalty level terms
+- a work mode choice like `Remote` can map into preferred location/work-mode terms
+- country selections can map into preferred location terms
+
+#### 5B. Curate And Constrain Input Options
+- define the first controlled option sets for:
+  - experience level
+  - work mode
+  - country/location selection
+  - email lookback options
+
+This keeps the first version understandable and aligned with the current small-source ingest reality.
+
+#### 5C. Keep The Translation Layer Explainable
+- the deterministic mapping should remain inspectable and testable
+- the saved structured profile remains the source of truth
+- future UI explainability should be able to point back to these mappings
+
+#### 5D. Prepare For Later Rescoring Or Explainability
+- keep the translation layer designed so it can later support:
+  - a future rescore pass for already-saved jobs
+  - scoring explainability
+  - optional LLM-assisted profile generation
+
+Current status:
+- Stage 5 has partially started as part of Stage 4 integration
+- the app now stores friendly UI-facing settings and derives scorer-facing fields from them
+- current deterministic mappings already exist for:
+  - desired roles -> role keywords
+  - experience level -> preferred and penalty level keywords
+  - work modes and locations -> preferred and penalty location terms
+  - avoid terms -> mismatch keywords
+
+What still remains for Stage 5:
+- refine and improve the translation heuristics
+- decide how broad or conservative role/skill/location expansions should be
+- make the translation layer easier to explain in the UI later
+- add more focused tests around the mappings themselves
 
 ## Stage 6: Add Optional LLM-Assisted Profile Generation
 
@@ -230,12 +344,33 @@ These should remain env/config driven:
 ### Stage 7
 - scoring explanation tests to ensure displayed reasons match actual scoring logic
 
+## Where We Are Now
+
+Current stage:
+- Stage 4 is implemented in the real app
+- Stage 5 has begun, but is not complete
+
+What was completed recently:
+- real onboarding and settings UI integrated into the app
+- preview styling/layout adopted as the real UI baseline
+- required-field-based `SetupComplete` behavior
+- live profile and email-update editing
+- real `Run Once` action
+- shared run coordination and basic run status reporting
+- "no new jobs" email update behavior
+- first-pass deterministic mapping from friendly UI inputs into scorer-facing fields
+
 ## Recommended Next Step
 
-Start with Stages 1 and 2 only:
+Continue with Stage 5:
 
-- define and persist profile/settings
-- move scorer construction off hardcoded values
-- prepare digest settings to move out of env-backed operator preferences
+- refine the deterministic translation layer
+- add direct tests for mapping behavior
+- review whether the current role/skill/location expansions are too broad or too narrow
+- improve how the UI explains what profile changes affect
 
-That gives the project a solid, testable foundation before introducing HTTP, UI, or LLM work.
+After that, the most natural follow-up is Stage 7 explainability:
+
+- show why a job scored well or poorly
+- surface matched and penalized signals in the UI
+- make the translation and scoring behavior easier for the user to trust and tune

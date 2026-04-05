@@ -12,31 +12,29 @@ import (
 	"time"
 
 	"opportunity-radar/internal/digest"
+	"opportunity-radar/internal/runcontrol"
 	"opportunity-radar/internal/scoring"
 )
 
 func TestSetupPostSavesSettingsAndUpdatesScorer(t *testing.T) {
 	service := &handlerStubService{
 		settings: &Settings{
-			RoleKeywords:           []string{"backend"},
-			SkillKeywords:          []string{"go"},
-			PreferredLevelKeywords: []string{"junior"},
-			DigestTopN:             10,
-			DigestLookback:         24 * time.Hour,
+			DigestTopN:     10,
+			DigestLookback: 24 * time.Hour,
 		},
 	}
 	scorer := &stubScorerUpdater{}
 	digestService := &stubDigestUpdater{}
-	handler := NewHandler(service, scorer, digestService, true, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	handler := NewHandler(service, scorer, digestService, &stubRunController{}, true, true, "Every 24h", slog.New(slog.NewTextHandler(io.Discard, nil)))
 
 	form := url.Values{}
-	form.Set("role_keywords", "backend\napi")
-	form.Set("skill_keywords", "go\ngolang")
-	form.Set("preferred_level_keywords", "junior")
-	form.Set("penalty_level_keywords", "senior")
-	form.Set("preferred_location_terms", "remote")
-	form.Set("penalty_location_terms", "onsite")
-	form.Set("mismatch_keywords", "sales")
+	form.Set("roles", "backend engineer\nsoftware engineer")
+	form.Set("experience_level", "Junior / early-career")
+	form.Add("locations", "Remote")
+	form.Add("work_modes", "Remote")
+	form.Set("current_skills", "go\ngolang")
+	form.Set("avoid", "sales")
+	form.Set("email_destination", "me@example.com")
 
 	req := httptest.NewRequest(http.MethodPost, "/setup", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -44,13 +42,13 @@ func TestSetupPostSavesSettingsAndUpdatesScorer(t *testing.T) {
 
 	handler.Setup(rec, req)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("unexpected status: got %d want 200", rec.Code)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("unexpected status: got %d want 303", rec.Code)
 	}
 	if service.settings == nil || !service.settings.SetupComplete {
 		t.Fatalf("expected setup to be marked complete")
 	}
-	if len(scorer.profile.RoleKeywords) != 2 {
+	if len(scorer.profile.RoleKeywords) == 0 {
 		t.Fatalf("expected scorer profile to be updated")
 	}
 }
@@ -65,7 +63,7 @@ func TestDigestSettingsPageShowsWarnings(t *testing.T) {
 			DigestLookback:  24 * time.Hour,
 		},
 	}
-	handler := NewHandler(service, &stubScorerUpdater{}, &stubDigestUpdater{}, false, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	handler := NewHandler(service, &stubScorerUpdater{}, &stubDigestUpdater{}, &stubRunController{}, false, true, "Every 24h", slog.New(slog.NewTextHandler(io.Discard, nil)))
 
 	req := httptest.NewRequest(http.MethodGet, "/settings/digest", nil)
 	rec := httptest.NewRecorder()
@@ -73,10 +71,10 @@ func TestDigestSettingsPageShowsWarnings(t *testing.T) {
 	handler.DigestSettings(rec, req)
 
 	body := rec.Body.String()
-	if !strings.Contains(body, "Digest is enabled, but no recipient email is set.") {
+	if !strings.Contains(body, "Email updates are enabled, but no destination email is set yet.") {
 		t.Fatalf("expected missing recipient warning")
 	}
-	if !strings.Contains(body, "Digests will be logged instead of emailed.") {
+	if !strings.Contains(body, "Updates will be logged instead of emailed.") {
 		t.Fatalf("expected resend warning")
 	}
 }
@@ -92,13 +90,13 @@ func TestDigestPostSavesSettingsAndUpdatesService(t *testing.T) {
 		},
 	}
 	digestService := &stubDigestUpdater{}
-	handler := NewHandler(service, &stubScorerUpdater{}, digestService, true, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	handler := NewHandler(service, &stubScorerUpdater{}, digestService, &stubRunController{}, true, true, "Every 24h", slog.New(slog.NewTextHandler(io.Discard, nil)))
 
 	form := url.Values{}
-	form.Set("digest_enabled", "on")
-	form.Set("digest_recipient", "user@example.com")
-	form.Set("digest_top_n", "15")
-	form.Set("digest_lookback", "48h")
+	form.Set("email_updates_enabled", "on")
+	form.Set("email_destination", "user@example.com")
+	form.Set("email_top_n", "15")
+	form.Set("email_lookback", "48h")
 
 	req := httptest.NewRequest(http.MethodPost, "/settings/digest", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -106,8 +104,8 @@ func TestDigestPostSavesSettingsAndUpdatesService(t *testing.T) {
 
 	handler.DigestSettings(rec, req)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("unexpected status: got %d want 200", rec.Code)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("unexpected status: got %d want 303", rec.Code)
 	}
 	if got := digestService.config.Recipient; got != "user@example.com" {
 		t.Fatalf("unexpected digest recipient: got %q", got)
@@ -153,4 +151,14 @@ func (s *stubDigestUpdater) UpdateConfig(config digest.Config) {
 
 func (s *stubDigestUpdater) CurrentConfig() digest.Config {
 	return s.config
+}
+
+type stubRunController struct{}
+
+func (s *stubRunController) RunNow(ctx context.Context) error {
+	return nil
+}
+
+func (s *stubRunController) Status() runcontrol.Status {
+	return runcontrol.Status{}
 }

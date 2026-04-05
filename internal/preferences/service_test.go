@@ -14,7 +14,10 @@ func TestServiceSaveNormalizesSettings(t *testing.T) {
 	service := NewService(repo, slog.New(slog.NewTextHandler(io.Discard, nil)))
 
 	err := service.Save(context.Background(), &Settings{
-		RoleKeywords:    []string{" Backend ", "backend", "", "API"},
+		DesiredRoles:    []string{" Backend Engineer ", "backend engineer"},
+		Locations:       []string{" Remote ", "remote"},
+		WorkModes:       []string{" Remote "},
+		ExperienceLevel: " Junior / early-career ",
 		DigestRecipient: "  test@example.com ",
 		DigestTopN:      0,
 		DigestLookback:  0,
@@ -27,7 +30,11 @@ func TestServiceSaveNormalizesSettings(t *testing.T) {
 		t.Fatalf("expected settings to be saved")
 	}
 
-	if got, want := repo.saved.RoleKeywords, []string{"backend", "api"}; !stringSlicesEqual(got, want) {
+	if got, want := repo.saved.DesiredRoles, []string{"backend engineer"}; !stringSlicesEqual(got, want) {
+		t.Fatalf("unexpected desired roles: got %v want %v", got, want)
+	}
+
+	if got, want := repo.saved.RoleKeywords, []string{"backend engineer", "backend", "software engineer", "engineer", "api", "platform"}; !stringSlicesEqual(got, want) {
 		t.Fatalf("unexpected role keywords: got %v want %v", got, want)
 	}
 
@@ -48,9 +55,12 @@ func TestServiceEnsureBootstrapsWhenMissing(t *testing.T) {
 	repo := &stubRepository{getErr: ErrNotFound}
 	service := NewService(repo, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	bootstrap := &Settings{
-		RoleKeywords:   []string{"backend"},
-		DigestTopN:     5,
-		DigestLookback: 12 * time.Hour,
+		DesiredRoles:    []string{"backend engineer"},
+		Locations:       []string{"remote"},
+		WorkModes:       []string{"remote"},
+		ExperienceLevel: "Junior / early-career",
+		DigestTopN:      5,
+		DigestLookback:  12 * time.Hour,
 	}
 
 	settings, created, err := service.Ensure(context.Background(), bootstrap)
@@ -63,7 +73,10 @@ func TestServiceEnsureBootstrapsWhenMissing(t *testing.T) {
 	if settings == nil {
 		t.Fatalf("expected settings result")
 	}
-	if got, want := settings.RoleKeywords, []string{"backend"}; !stringSlicesEqual(got, want) {
+	if got, want := settings.DesiredRoles, []string{"backend engineer"}; !stringSlicesEqual(got, want) {
+		t.Fatalf("unexpected desired roles: got %v want %v", got, want)
+	}
+	if got, want := settings.RoleKeywords, []string{"backend engineer", "backend", "software engineer", "engineer", "api", "platform"}; !stringSlicesEqual(got, want) {
 		t.Fatalf("unexpected role keywords: got %v want %v", got, want)
 	}
 }

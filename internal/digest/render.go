@@ -58,3 +58,16 @@ func RenderMessage(recipient string, items []JobDigestItem) Message {
 		HTMLBody: htmlBody.String(),
 	}
 }
+
+func RenderNoJobsMessage(recipient string) Message {
+	subject := "Opportunity Radar Daily Digest: no new jobs today"
+	textBody := "Opportunity Radar ran successfully today, but no new matching jobs were found in your current lookback window."
+	htmlBody := "<html><body><h1>Opportunity Radar Daily Digest</h1><p>Opportunity Radar ran successfully today, but no new matching jobs were found in your current lookback window.</p></body></html>"
+
+	return Message{
+		To:       recipient,
+		Subject:  subject,
+		TextBody: textBody,
+		HTMLBody: htmlBody,
+	}
+}

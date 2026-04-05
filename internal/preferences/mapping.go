@@ -166,7 +166,7 @@ func BuildScoringProfile(s *Settings) scoring.Profile {
 func deriveRoleKeywords(roles []string) []string {
 	derived := normalizeStringList(roles)
 	if len(derived) == 0 {
-		return nil
+		return []string{}
 	}
 
 	result := make([]string, 0, len(derived)*4)
@@ -203,7 +203,7 @@ func deriveLevelKeywords(level string) ([]string, []string) {
 		return []string{"lead", "manager", "head of", "director"},
 			[]string{"intern", "entry level", "entry-level", "junior", "associate"}
 	default:
-		return nil, nil
+		return []string{}, []string{}
 	}
 }
 
@@ -255,7 +255,7 @@ func matchedRoleFamilies(role string) []string {
 	}
 
 	if len(matches) == 0 {
-		return nil
+		return []string{}
 	}
 
 	return normalizeStringList(matches)

@@ -26,6 +26,18 @@
 
   <main class="page-shell">
     {{if .Flash}}<div class="flash">{{.Flash}}</div>{{end}}
+    {{if .SetupReminder}}
+      <section class="panel panel-warning setup-banner">
+        <div class="setup-banner-head">
+          <div>
+            <h2>{{.SetupReminder.Title}}</h2>
+            <p class="helper">{{.SetupReminder.Message}}</p>
+          </div>
+          <a class="button button-secondary" href="/setup">Complete Setup</a>
+        </div>
+        <p class="helper">Still missing: {{joinLines .SetupReminder.Missing}}</p>
+      </section>
+    {{end}}
     {{if .Warnings}}
       <section class="panel panel-warning">
         <h2>Note</h2>
@@ -39,9 +51,9 @@
       <div class="section-head">
         <div>
           <p class="eyebrow">What Opportunity Radar should optimize for</p>
-          <h2>{{if .State.SetupComplete}}Setup is complete{{else}}Setup still needs attention{{end}}</h2>
+          <h2>{{if not .State.SetupComplete}}Setup still needs attention{{else if .SetupReminder}}Setup is almost done{{else}}Setup is complete{{end}}</h2>
         </div>
-        {{if not .State.SetupComplete}}<a class="button button-secondary" href="/setup">Finish onboarding</a>{{end}}
+        {{if or (not .State.SetupComplete) .SetupReminder}}<a class="button button-secondary" href="/setup">Finish onboarding</a>{{end}}
       </div>
 
       <div class="summary-grid">

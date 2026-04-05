@@ -29,6 +29,18 @@
 
   <main class="page-shell">
     {{if .Flash}}<div class="flash">{{.Flash}}</div>{{end}}
+    {{if .SetupReminder}}
+      <section class="panel panel-warning setup-banner">
+        <div class="setup-banner-head">
+          <div>
+            <h2>{{.SetupReminder.Title}}</h2>
+            <p class="helper">{{.SetupReminder.Message}}</p>
+          </div>
+          <a class="button button-secondary" href="/setup">Complete Setup</a>
+        </div>
+        <p class="helper">Still missing: {{joinLines .SetupReminder.Missing}}</p>
+      </section>
+    {{end}}
     {{if .Warnings}}
       <section class="panel panel-warning">
         <h2>Attention</h2>
@@ -46,7 +58,7 @@
         <div class="status-grid">
           <div class="status-card">
             <span class="status-label">Setup</span>
-            <strong>{{if .State.SetupComplete}}Complete{{else}}Needs attention{{end}}</strong>
+            <strong>{{if not .State.SetupComplete}}Needs attention{{else if .SetupReminder}}Incomplete{{else}}Complete{{end}}</strong>
           </div>
           <div class="status-card">
             <span class="status-label">Email updates</span>
@@ -123,7 +135,7 @@
           </div>
           <div>
             <dt>Lookback window</dt>
-            <dd>{{.State.DigestLookback}}</dd>
+            <dd>{{formatLookback .State.DigestLookback}}</dd>
           </div>
           <div>
             <dt>Delivery mode</dt>

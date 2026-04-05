@@ -53,6 +53,80 @@ func TestSetupPostSavesSettingsAndUpdatesScorer(t *testing.T) {
 	}
 }
 
+func TestSetupPostUsesNonCompleteFlashWhenRecommendedFieldsAreMissing(t *testing.T) {
+	service := &handlerStubService{
+		settings: &Settings{
+			DigestTopN:     10,
+			DigestLookback: 24 * time.Hour,
+		},
+	}
+	scorer := &stubScorerUpdater{}
+	digestService := &stubDigestUpdater{}
+	handler := NewHandler(service, scorer, digestService, &stubRunController{}, true, true, "Every 24h", slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	form := url.Values{}
+	form.Set("roles", "backend engineer")
+	form.Set("experience_level", "Junior / early-career")
+	form.Add("locations", "Remote")
+	form.Add("work_modes", "Remote")
+
+	req := httptest.NewRequest(http.MethodPost, "/setup", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+
+	handler.Setup(rec, req)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("unexpected status: got %d want 303", rec.Code)
+	}
+
+	location := rec.Header().Get("Location")
+	if location != "/settings/profile" {
+		t.Fatalf("unexpected redirect location: %q", location)
+	}
+}
+
+func TestSetupPostAllowsPartialSaveAndKeepsSetupIncomplete(t *testing.T) {
+	service := &handlerStubService{
+		settings: &Settings{
+			DigestTopN:     10,
+			DigestLookback: 24 * time.Hour,
+		},
+	}
+	scorer := &stubScorerUpdater{}
+	digestService := &stubDigestUpdater{}
+	handler := NewHandler(service, scorer, digestService, &stubRunController{}, true, true, "Every 24h", slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	form := url.Values{}
+	form.Set("experience_level", "Junior / early-career")
+	form.Set("email_destination", "me@example.com")
+
+	req := httptest.NewRequest(http.MethodPost, "/setup", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+
+	handler.Setup(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("unexpected status: got %d want 200", rec.Code)
+	}
+	if service.settings == nil {
+		t.Fatalf("expected settings to be saved")
+	}
+	if service.settings.SetupComplete {
+		t.Fatalf("expected setup to remain incomplete")
+	}
+	if got := service.settings.ExperienceLevel; got != "Junior / early-career" {
+		t.Fatalf("unexpected experience level: got %q", got)
+	}
+	if got := service.settings.RoleKeywords; len(got) != 0 {
+		t.Fatalf("expected empty role keywords for partial save, got %v", got)
+	}
+	if !strings.Contains(rec.Body.String(), "Setup saved, but some required fields are still missing.") {
+		t.Fatalf("expected partial setup message in response body")
+	}
+}
+
 func TestDigestSettingsPageShowsWarnings(t *testing.T) {
 	service := &handlerStubService{
 		settings: &Settings{
@@ -112,6 +186,141 @@ func TestDigestPostSavesSettingsAndUpdatesService(t *testing.T) {
 	}
 	if got := digestService.config.TopN; got != 15 {
 		t.Fatalf("unexpected digest top n: got %d", got)
+	}
+}
+
+func TestHomeShowsSetupReminderWhenRecommendedFieldsAreMissing(t *testing.T) {
+	service := &handlerStubService{
+		settings: &Settings{
+			SetupComplete:   true,
+			DesiredRoles:    []string{"backend engineer"},
+			ExperienceLevel: "Junior / early-career",
+			Locations:       []string{"remote"},
+			WorkModes:       []string{"remote"},
+			DigestTopN:      10,
+			DigestLookback:  24 * time.Hour,
+		},
+	}
+	handler := NewHandler(service, &stubScorerUpdater{}, &stubDigestUpdater{}, &stubRunController{}, true, true, "Every 24h", slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+
+	handler.Home(rec, req)
+
+	body := rec.Body.String()
+	if rec.Code != http.StatusOK {
+		t.Fatalf("unexpected status: got %d want 200", rec.Code)
+	}
+	if !strings.Contains(body, "Setup is almost done") {
+		t.Fatalf("expected setup reminder banner")
+	}
+	if !strings.Contains(body, "Complete Setup") {
+		t.Fatalf("expected complete setup action")
+	}
+	if !strings.Contains(body, "Still missing: current skills, growth skills, avoid terms, email destination") {
+		t.Fatalf("expected missing recommended fields summary")
+	}
+	if !strings.Contains(body, "<strong>Incomplete</strong>") {
+		t.Fatalf("expected setup status card to show incomplete")
+	}
+}
+
+func TestHomeHidesSetupReminderWhenRecommendedFieldsAreFilled(t *testing.T) {
+	service := &handlerStubService{
+		settings: &Settings{
+			SetupComplete:   true,
+			DesiredRoles:    []string{"backend engineer"},
+			ExperienceLevel: "Junior / early-career",
+			CurrentSkills:   []string{"go"},
+			GrowthSkills:    []string{"python"},
+			Locations:       []string{"remote"},
+			WorkModes:       []string{"remote"},
+			AvoidTerms:      []string{"sales"},
+			DigestRecipient: "me@example.com",
+			DigestTopN:      10,
+			DigestLookback:  24 * time.Hour,
+		},
+	}
+	handler := NewHandler(service, &stubScorerUpdater{}, &stubDigestUpdater{}, &stubRunController{}, true, true, "Every 24h", slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+
+	handler.Home(rec, req)
+
+	body := rec.Body.String()
+	if rec.Code != http.StatusOK {
+		t.Fatalf("unexpected status: got %d want 200", rec.Code)
+	}
+	if strings.Contains(body, "Setup is almost done") {
+		t.Fatalf("did not expect setup reminder banner")
+	}
+}
+
+func TestProfileShowsIncompleteMessagingWhenRecommendedFieldsAreMissing(t *testing.T) {
+	service := &handlerStubService{
+		settings: &Settings{
+			SetupComplete:   true,
+			DesiredRoles:    []string{"backend engineer"},
+			ExperienceLevel: "Junior / early-career",
+			Locations:       []string{"remote"},
+			WorkModes:       []string{"remote"},
+			DigestTopN:      10,
+			DigestLookback:  24 * time.Hour,
+		},
+	}
+	handler := NewHandler(service, &stubScorerUpdater{}, &stubDigestUpdater{}, &stubRunController{}, true, true, "Every 24h", slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	req := httptest.NewRequest(http.MethodGet, "/settings/profile", nil)
+	rec := httptest.NewRecorder()
+
+	handler.ProfileSettings(rec, req)
+
+	body := rec.Body.String()
+	if rec.Code != http.StatusOK {
+		t.Fatalf("unexpected status: got %d want 200", rec.Code)
+	}
+	if !strings.Contains(body, "Setup is almost done") {
+		t.Fatalf("expected profile page to show reminder-aware heading")
+	}
+	if !strings.Contains(body, "Complete Setup") {
+		t.Fatalf("expected complete setup action on profile page")
+	}
+	if strings.Contains(body, "Setup is complete") {
+		t.Fatalf("did not expect fully complete messaging while recommended fields are missing")
+	}
+}
+
+func TestHomeFormatsLookbackWindowWithoutMinutesAndSeconds(t *testing.T) {
+	service := &handlerStubService{
+		settings: &Settings{
+			SetupComplete:   true,
+			DesiredRoles:    []string{"backend engineer"},
+			ExperienceLevel: "Junior / early-career",
+			CurrentSkills:   []string{"go"},
+			GrowthSkills:    []string{"python"},
+			Locations:       []string{"remote"},
+			WorkModes:       []string{"remote"},
+			AvoidTerms:      []string{"sales"},
+			DigestRecipient: "me@example.com",
+			DigestTopN:      10,
+			DigestLookback:  24 * time.Hour,
+		},
+	}
+	handler := NewHandler(service, &stubScorerUpdater{}, &stubDigestUpdater{}, &stubRunController{}, true, true, "Every 24h", slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+
+	handler.Home(rec, req)
+
+	body := rec.Body.String()
+	if !strings.Contains(body, "<dd>24h</dd>") {
+		t.Fatalf("expected formatted 24h lookback, got body %q", body)
+	}
+	if strings.Contains(body, "24h0m0s") {
+		t.Fatalf("did not expect raw duration string")
 	}
 }
 

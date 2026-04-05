@@ -81,6 +81,35 @@ func TestServiceEnsureBootstrapsWhenMissing(t *testing.T) {
 	}
 }
 
+func TestServiceSaveUsesEmptySlicesForUnsetDerivedFields(t *testing.T) {
+	repo := &stubRepository{}
+	service := NewService(repo, slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	err := service.Save(context.Background(), &Settings{
+		ExperienceLevel: "Junior / early-career",
+	})
+	if err != nil {
+		t.Fatalf("expected save to succeed: %v", err)
+	}
+
+	if repo.saved == nil {
+		t.Fatalf("expected settings to be saved")
+	}
+
+	if repo.saved.RoleKeywords == nil {
+		t.Fatalf("expected empty role keywords slice, got nil")
+	}
+	if repo.saved.MismatchKeywords == nil {
+		t.Fatalf("expected empty mismatch keywords slice, got nil")
+	}
+	if len(repo.saved.RoleKeywords) != 0 {
+		t.Fatalf("expected no role keywords, got %v", repo.saved.RoleKeywords)
+	}
+	if len(repo.saved.MismatchKeywords) != 0 {
+		t.Fatalf("expected no mismatch keywords, got %v", repo.saved.MismatchKeywords)
+	}
+}
+
 type stubRepository struct {
 	getErr error
 	saved  *Settings

@@ -113,7 +113,7 @@ func normalizeSettings(input *Settings) *Settings {
 
 func normalizeStringList(values []string) []string {
 	if len(values) == 0 {
-		return nil
+		return []string{}
 	}
 
 	seen := make(map[string]struct{}, len(values))
@@ -129,6 +129,10 @@ func normalizeStringList(values []string) []string {
 		}
 		seen[value] = struct{}{}
 		normalized = append(normalized, value)
+	}
+
+	if len(normalized) == 0 {
+		return []string{}
 	}
 
 	return normalized

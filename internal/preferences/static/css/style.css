@@ -101,6 +101,13 @@ h3 { font-size: 1.1rem; }
 .panel-warning { background: var(--warning-bg); border-color: var(--warning-border); }
 .panel-warning h2 { color: var(--warning-text); }
 .panel-accent { background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%); border-top: 3px solid var(--accent); }
+.setup-banner { margin-bottom: 1.5rem; }
+.setup-banner-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
 
 .status-card, .summary-card {
   background: var(--surface-strong);
@@ -234,7 +241,7 @@ textarea { resize: vertical; }
 .inline-label { display: block; font-weight: 600; margin-bottom: 0.15rem; }
 
 @media (max-width: 860px) {
-  .site-header, .section-head { flex-direction: column; align-items: flex-start; }
+  .site-header, .section-head, .setup-banner-head { flex-direction: column; align-items: flex-start; }
   .hero-grid, .two-column, .form-grid, .status-grid, .summary-grid { grid-template-columns: 1fr; }
   .check-grid, .check-grid-wide { grid-template-columns: 1fr 1fr; }
 }

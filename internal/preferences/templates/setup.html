@@ -35,26 +35,27 @@
         {{if .State.PartialSetup}}<a class="button button-secondary" href="/settings/profile">See current profile</a>{{end}}
       </div>
 
-      <form class="form-grid" method="post" action="/setup">
+      <form class="form-grid" method="post" action="/setup" id="setup-form">
         <label class="field field-wide">
           <span>What roles are you looking for?</span>
-          <small>Example: Backend engineer, software engineer, platform engineer</small>
-          <textarea name="roles" rows="4">{{textareaLines .State.DesiredRoles}}</textarea>
+          <small>Required. Example: Backend engineer, software engineer, platform engineer</small>
+          <textarea name="roles" rows="4" required>{{textareaLines .State.DesiredRoles}}</textarea>
         </label>
 
         <label class="field">
           <span>What experience level are you at?</span>
-          <small>Choose the level that feels closest today.</small>
-          <select name="experience_level">
+          <small>Required. Choose the level that feels closest today.</small>
+          <select name="experience_level" required>
+            <option value="">Select one</option>
             {{range .ExperienceOptions}}
               <option value="{{.}}" {{if eq $.State.ExperienceLevel .}}selected{{end}}>{{.}}</option>
             {{end}}
           </select>
         </label>
 
-        <fieldset class="field">
+        <fieldset class="field" data-required-group="work_modes">
           <span>Remote, hybrid, or on-site preference</span>
-          <small>You can choose more than one.</small>
+          <small>Required. You can choose more than one.</small>
           <div class="check-grid">
             {{range .WorkModeOptions}}
               <label class="check-option">
@@ -77,9 +78,9 @@
           <textarea name="growth_skills" rows="4">{{textareaLines .State.GrowthSkills}}</textarea>
         </label>
 
-        <fieldset class="field field-wide">
+        <fieldset class="field field-wide" data-required-group="locations">
           <span>Which countries are okay?</span>
-          <small>Choose all that apply. Remote is listed first so you can prefer that without picking a country.</small>
+          <small>Required. Choose all that apply. Remote is listed first so you can prefer that without picking a country.</small>
           <div class="check-grid check-grid-wide">
             {{range .LocationOptions}}
               <label class="check-option">
@@ -108,5 +109,35 @@
       </form>
     </section>
   </main>
+  <script>
+    (function () {
+      const form = document.getElementById("setup-form");
+      if (!form) {
+        return;
+      }
+
+      const requireOneChecked = function (fieldName, message) {
+        const inputs = form.querySelectorAll('input[name="' + fieldName + '"]');
+        const hasChecked = Array.from(inputs).some(function (input) {
+          return input.checked;
+        });
+
+        Array.from(inputs).forEach(function (input) {
+          input.setCustomValidity(hasChecked ? "" : message);
+        });
+      };
+
+      const validate = function () {
+        requireOneChecked("work_modes", "Choose at least one work mode.");
+        requireOneChecked("locations", "Choose at least one location.");
+      };
+
+      form.addEventListener("submit", validate);
+      form.querySelectorAll('input[name="work_modes"], input[name="locations"]').forEach(function (input) {
+        input.addEventListener("change", validate);
+      });
+      validate();
+    }());
+  </script>
 </body>
 </html>

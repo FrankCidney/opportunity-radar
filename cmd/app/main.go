@@ -63,18 +63,18 @@ func main() {
 	preferencesRepo := preferences.NewPostgresRepository(sqlDB, logr)
 	preferencesService := preferences.NewService(preferencesRepo, logr)
 
-	settings, settingsCreated, err := preferencesService.Ensure(ctx, defaultSettingsBootstrap(cfg))
+	settings, settingsCreated, err := preferencesService.Ensure(ctx, defaultSettingsBootstrap())
 	if err != nil {
 		logr.Error("failed to load app settings", "error", err)
 		os.Exit(1)
 	}
 	if settingsCreated {
-		logr.Info("bootstrapped app settings from default profile and current digest env values",
+		logr.Info("bootstrapped empty app settings for first-run onboarding",
 			"setup_complete", settings.SetupComplete,
 		)
 	}
 	if !settings.SetupComplete {
-		logr.Warn("app settings are not marked complete yet; using bootstrap settings until setup UI is added")
+		logr.Warn("app settings are not marked complete yet; redirecting to onboarding until required fields are filled")
 	}
 
 	scorer := scoring.NewRulesScorer(preferences.BuildScoringProfile(settings))
@@ -196,23 +196,9 @@ func isResendConfigured(cfg config.Config) bool {
 	return cfg.ResendAPIKey != "" && cfg.ResendFromEmail != ""
 }
 
-func defaultSettingsBootstrap(cfg config.Config) *preferences.Settings {
-	settings := &preferences.Settings{
-		SetupComplete:   false,
-		DesiredRoles:    []string{"backend engineer", "software engineer"},
-		ExperienceLevel: "Junior / early-career",
-		CurrentSkills:   []string{"go", "postgres", "docker"},
-		GrowthSkills:    []string{"python", "ai/ml"},
-		Locations:       []string{"remote", "kenya"},
-		WorkModes:       []string{"remote", "hybrid"},
-		AvoidTerms:      []string{"senior", "manager", "sales"},
-		DigestEnabled:   cfg.DigestEnabled,
-		DigestRecipient: cfg.DigestToEmail,
-		DigestTopN:      cfg.DigestTopN,
-		DigestLookback:  cfg.DigestLookback,
-	}
+func defaultSettingsBootstrap() *preferences.Settings {
+	settings := &preferences.Settings{}
 	settings.RecalculateDerivedFields()
-	settings.SetupComplete = false
 	return settings
 }
 

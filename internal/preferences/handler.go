@@ -66,9 +66,10 @@ func NewHandler(
 	logger *slog.Logger,
 ) *Handler {
 	tmpl := template.Must(template.New("").Funcs(template.FuncMap{
-		"joinLines":     joinLines,
-		"textareaLines": textareaLines,
-		"contains":      contains,
+		"joinLines":      joinLines,
+		"textareaLines":  textareaLines,
+		"contains":       contains,
+		"formatLookback": formatLookback,
 	}).ParseFS(templatesFS, "templates/*.html"))
 
 	staticRoot, err := fs.Sub(staticFS, "static")
@@ -113,6 +114,7 @@ func (h *Handler) Home(w http.ResponseWriter, r *http.Request) {
 		State:                settings,
 		Flash:                r.URL.Query().Get("flash"),
 		Warnings:             statusWarnings(settings, h.schedulerEnabled, h.resendConfigured),
+		SetupReminder:        optionalSetupReminder(settings),
 		SchedulerEnabled:     h.schedulerEnabled,
 		ScheduleLabel:        h.scheduleLabel,
 		ResendConfigured:     h.resendConfigured,
@@ -177,6 +179,7 @@ func (h *Handler) ProfileSettings(w http.ResponseWriter, r *http.Request) {
 		State:                settings,
 		Flash:                r.URL.Query().Get("flash"),
 		Warnings:             []string{"Changes here affect future scoring runs. Existing saved jobs are not automatically rescored."},
+		SetupReminder:        optionalSetupReminder(settings),
 		SchedulerEnabled:     h.schedulerEnabled,
 		ScheduleLabel:        h.scheduleLabel,
 		ResendConfigured:     h.resendConfigured,
@@ -297,6 +300,8 @@ func (h *Handler) handleSetupSave(w http.ResponseWriter, r *http.Request) {
 	populateProfileFromForm(settings, r)
 	settings.DigestRecipient = strings.TrimSpace(r.FormValue("email_destination"))
 	settings.RecalculateDerivedFields()
+
+	missingRequired := missingRequiredSetupFields(settings)
 	if err := h.service.Save(r.Context(), settings); err != nil {
 		h.writeError(w, http.StatusInternalServerError, "failed to save settings", err)
 		return
@@ -304,16 +309,31 @@ func (h *Handler) handleSetupSave(w http.ResponseWriter, r *http.Request) {
 
 	h.scorer.SetProfile(BuildScoringProfile(settings))
 	if settings.SetupComplete {
-		http.Redirect(w, r, "/settings/profile?flash=Setup+complete.+You+can+edit+these+settings+any+time.", http.StatusSeeOther)
+		if len(missingRecommendedSetupFields(settings)) == 0 {
+			http.Redirect(w, r, "/settings/profile?flash=Setup+complete.+You+can+edit+these+settings+any+time.", http.StatusSeeOther)
+			return
+		}
+
+		http.Redirect(w, r, "/settings/profile", http.StatusSeeOther)
 		return
+	}
+
+	flash := "Setup saved. Finish the required fields to unlock the home page."
+	if len(missingRequired) > 0 {
+		flash = "Setup saved, but some required fields are still missing."
+	}
+
+	warnings := onboardingWarnings(settings)
+	if len(missingRequired) > 0 {
+		warnings = append(warnings, "Still required: "+strings.Join(missingRequired, ", ")+".")
 	}
 
 	h.render(w, "setup.html", pageData{
 		Title:                "Set Up Opportunity Radar",
 		ActiveNav:            "onboarding",
 		State:                settings,
-		Flash:                "Setup saved. Finish the required fields to unlock the home page.",
-		Warnings:             append(onboardingWarnings(settings), "Required: roles, experience level, at least one location, and at least one work mode."),
+		Flash:                flash,
+		Warnings:             warnings,
 		SchedulerEnabled:     h.schedulerEnabled,
 		ScheduleLabel:        h.scheduleLabel,
 		ResendConfigured:     h.resendConfigured,
@@ -463,6 +483,57 @@ func onboardingWarnings(settings *Settings) []string {
 	return nil
 }
 
+func missingRequiredSetupFields(settings *Settings) []string {
+	missing := []string{}
+	if len(normalizeStringList(settings.DesiredRoles)) == 0 {
+		missing = append(missing, "roles")
+	}
+	if strings.TrimSpace(settings.ExperienceLevel) == "" {
+		missing = append(missing, "experience level")
+	}
+	if len(normalizeStringList(settings.Locations)) == 0 {
+		missing = append(missing, "at least one location")
+	}
+	if len(normalizeStringList(settings.WorkModes)) == 0 {
+		missing = append(missing, "at least one work mode")
+	}
+	return missing
+}
+
+func missingRecommendedSetupFields(settings *Settings) []string {
+	missing := []string{}
+	if len(normalizeStringList(settings.CurrentSkills)) == 0 {
+		missing = append(missing, "current skills")
+	}
+	if len(normalizeStringList(settings.GrowthSkills)) == 0 {
+		missing = append(missing, "growth skills")
+	}
+	if len(normalizeStringList(settings.AvoidTerms)) == 0 {
+		missing = append(missing, "avoid terms")
+	}
+	if strings.TrimSpace(settings.DigestRecipient) == "" {
+		missing = append(missing, "email destination")
+	}
+	return missing
+}
+
+func optionalSetupReminder(settings *Settings) *setupReminder {
+	if settings == nil || !settings.SetupComplete {
+		return nil
+	}
+
+	missing := missingRecommendedSetupFields(settings)
+	if len(missing) == 0 {
+		return nil
+	}
+
+	return &setupReminder{
+		Title:   "Setup is almost done",
+		Message: "A few recommended fields are still blank. Fill them in so future runs and updates reflect your full preferences.",
+		Missing: missing,
+	}
+}
+
 func statusWarnings(settings *Settings, schedulerEnabled bool, resendConfigured bool) []string {
 	warnings := make([]string, 0, 3)
 	if !schedulerEnabled {
@@ -505,12 +576,26 @@ func contains(values []string, want string) bool {
 	return false
 }
 
+func formatLookback(value time.Duration) string {
+	if value <= 0 {
+		return "Not set yet"
+	}
+
+	hours := int(value / time.Hour)
+	if hours > 0 && value == time.Duration(hours)*time.Hour {
+		return strconv.Itoa(hours) + "h"
+	}
+
+	return value.String()
+}
+
 type pageData struct {
 	Title                string
 	ActiveNav            string
 	State                *Settings
 	Flash                string
 	Warnings             []string
+	SetupReminder        *setupReminder
 	SchedulerEnabled     bool
 	ScheduleLabel        string
 	ResendConfigured     bool
@@ -519,4 +604,10 @@ type pageData struct {
 	WorkModeOptions      []string
 	LocationOptions      []string
 	EmailLookbackOptions []string
+}
+
+type setupReminder struct {
+	Title   string
+	Message string
+	Missing []string
 }

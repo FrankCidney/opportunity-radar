@@ -231,6 +231,7 @@ There is currently one implemented scraper:
 The scraper:
 
 - calls the Remotive API
+- fetches the broad public jobs feed rather than hardcoding a single category filter
 - parses the JSON response
 - converts response items into `normalize.RawJob`
 - currently captures company logo, job type, salary, HTML description, and other core job fields
@@ -270,7 +271,7 @@ Operator-facing digest preferences are now persisted in `app_settings` and used 
 - digest top N
 - digest lookback
 
-Those digest preference values are still bootstrapped from env on first run if no `app_settings` row exists yet, but after bootstrap the app uses the persisted values.
+Those digest preference values are now owned by persisted app settings and the admin UI rather than digest-specific env bootstrap.
 
 Profile/scoring preferences are also persisted in `app_settings`, including:
 
@@ -511,7 +512,9 @@ The following files exist but are mostly stubs:
 - [handler.go](/home/francis/projects/my-repos/opportunity-radar/internal/companies/handler.go)
 - [routes.go](/home/francis/projects/my-repos/opportunity-radar/internal/companies/routes.go)
 
-There is not yet a real API or UI flow built on top of the services.
+There is not yet a real jobs/companies API flow built on top of those services.
+
+The real app does now expose a server-rendered admin/settings surface through `internal/preferences`.
 
 ### App Runtime
 
@@ -519,7 +522,7 @@ There is not yet a real API or UI flow built on top of the services.
 
 It still does not yet:
 
-- expose HTTP endpoints
+- expose a public jobs/companies API beyond the admin/settings routes
 
 Useful runtime commands now live in the `Makefile`:
 
@@ -529,7 +532,7 @@ Useful runtime commands now live in the `Makefile`:
 
 ### Tests
 
-There are still few tests overall, but there is now focused coverage around Remotive description normalization, scheduler behavior, and digest selection/send tracking behavior.
+There are still few tests overall, but there is now focused coverage around the Remotive scraper, Remotive description normalization, scheduler behavior, and digest selection/send tracking behavior.
 
 The code currently passes `go test ./...`, but there is not yet meaningful automated coverage of:
 
@@ -559,8 +562,8 @@ Today, the project is best described as:
 - scraper support: one source implemented
 - scheduler: implemented for single-process daily execution
 - daily digest: implemented with persisted send tracking and Resend delivery support
-- HTTP/UI: not implemented
-- tests: still light overall, but scheduler and digest unit tests now exist
+- HTTP/UI: admin/setup/settings UI implemented; jobs/companies API/UI still incomplete
+- tests: still light overall, but scraper, scheduler, digest, and normalization unit tests now exist
 
 ## Hosting Direction
 

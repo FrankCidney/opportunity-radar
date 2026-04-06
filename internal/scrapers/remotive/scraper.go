@@ -14,14 +14,29 @@ import (
 )
 
 type Scraper struct {
-	client *http.Client
-	logger *slog.Logger
+	endpoint string
+	client   *http.Client
+	logger   *slog.Logger
 }
 
+const jobsEndpoint = "https://remotive.com/api/remote-jobs"
+
 func NewScraper(logger *slog.Logger) *Scraper {
+	return newScraper(jobsEndpoint, &http.Client{Timeout: 15 * time.Second}, logger)
+}
+
+func newScraper(endpoint string, client *http.Client, logger *slog.Logger) *Scraper {
+	if endpoint == "" {
+		endpoint = jobsEndpoint
+	}
+	if client == nil {
+		client = &http.Client{Timeout: 15 * time.Second}
+	}
+
 	return &Scraper{
-		client: &http.Client{Timeout: 15 * time.Second},
-		logger: logger,
+		endpoint: endpoint,
+		client:   client,
+		logger:   logger,
 	}
 }
 
@@ -30,8 +45,7 @@ func (s *Scraper) Source() string {
 }
 
 func (s *Scraper) Scrape(ctx context.Context) ([]normalize.RawJob, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
-		"https://remotive.com/api/remote-jobs?category=software-dev", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.endpoint, nil)
 	if err != nil {
 		return nil, fmt.Errorf("build request: %w", err)
 	}

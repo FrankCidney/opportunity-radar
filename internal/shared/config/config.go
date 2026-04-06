@@ -15,10 +15,6 @@ type Config struct {
 	SchedulerInterval   time.Duration
 	SchedulerRunOnStart bool
 	SchedulerRunTimeout time.Duration
-	DigestEnabled       bool
-	DigestToEmail       string
-	DigestTopN          int
-	DigestLookback      time.Duration
 	ResendAPIKey        string
 	ResendFromEmail     string
 	ResendFromName      string
@@ -110,21 +106,6 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
-	digestEnabled, err := getEnvBool("DIGEST_ENABLED", false)
-	if err != nil {
-		return Config{}, err
-	}
-
-	digestTopN, err := getEnvInt("DIGEST_TOP_N", 10)
-	if err != nil {
-		return Config{}, err
-	}
-
-	digestLookback, err := getEnvDuration("DIGEST_LOOKBACK", 24*time.Hour)
-	if err != nil {
-		return Config{}, err
-	}
-
 	return Config{
 		Env:                 getEnv("ENV", "development"),
 		Port:                getEnv("PORT", "8080"),
@@ -133,10 +114,6 @@ func Load() (Config, error) {
 		SchedulerInterval:   schedulerInterval,
 		SchedulerRunOnStart: schedulerRunOnStart,
 		SchedulerRunTimeout: schedulerRunTimeout,
-		DigestEnabled:       digestEnabled,
-		DigestToEmail:       getEnv("DIGEST_TO_EMAIL", ""),
-		DigestTopN:          digestTopN,
-		DigestLookback:      digestLookback,
 		ResendAPIKey:        getEnv("RESEND_API_KEY", ""),
 		ResendFromEmail:     getEnv("RESEND_FROM_EMAIL", ""),
 		ResendFromName:      getEnv("RESEND_FROM_NAME", ""),

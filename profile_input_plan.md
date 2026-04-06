@@ -280,16 +280,14 @@ Notes:
 - explainability will make profile editing much easier later
 - this is especially useful once LLM-assisted profile generation exists
 
-## Current Env Settings To Move Into Persisted UI-Editable Settings
+## Current Env Settings That Moved Into Persisted UI-Editable Settings
 
-These are better treated as operator preferences than deployment config:
+These operator preferences are now owned by persisted app settings and the real UI instead of env config:
 
-- `DIGEST_TO_EMAIL`
-- `DIGEST_ENABLED`
-- `DIGEST_TOP_N`
-- `DIGEST_LOOKBACK`
-
-These should eventually be editable in the app UI after initial setup.
+- digest recipient
+- digest enabled
+- digest top N
+- digest lookback
 
 ## Current Env Settings To Keep As Deployment/Infrastructure Config
 

@@ -1,0 +1,27 @@
+# Copy this file to fly.toml and replace the placeholder values before deploying.
+
+app = "your-opportunity-radar-app"
+primary_region = "jnb"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  ENV = "production"
+  PORT = "8080"
+  SCHEDULER_ENABLED = "true"
+  SCHEDULER_INTERVAL = "24h"
+  SCHEDULER_RUN_ON_START = "true"
+  SCHEDULER_RUN_TIMEOUT = "30m"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "off"
+  auto_start_machines = false
+  processes = ["app"]
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory = "256mb"

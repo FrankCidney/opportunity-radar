@@ -1,0 +1,10 @@
+.git
+.gitignore
+.kilo
+.tmp
+.env
+notes.md
+Agents.md
+current_state.md
+profile_input_plan.md
+ui-prototype

@@ -22,6 +22,7 @@ import (
 	"opportunity-radar/internal/scrapers/remotive"
 	"opportunity-radar/internal/shared/config"
 	"opportunity-radar/internal/shared/logger"
+	"opportunity-radar/internal/shared/migrator"
 )
 
 func main() {
@@ -55,6 +56,11 @@ func main() {
 		os.Exit(1)
 	}
 	defer sqlDB.Close()
+
+	if err := migrator.Run(ctx, sqlDB, logr); err != nil {
+		logr.Error("failed to run database migrations", "error", err)
+		os.Exit(1)
+	}
 
 	companiesRepo := companies.NewPostgresRepository(sqlDB, logr)
 	companyService := companies.NewService(companiesRepo, logr)

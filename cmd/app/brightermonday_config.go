@@ -11,7 +11,7 @@ func buildBrighterMondayConfig(settings *preferences.Settings) brightermonday.Co
 	paths := deriveBrighterMondayListingPaths(settings)
 	return brightermonday.Config{
 		ListingPaths:    paths,
-		MaxPagesPerPath: 1,
+		MaxPagesPerPath: 3,
 	}
 }
 

@@ -2,6 +2,8 @@
 
 Opportunity Radar is a self-hosted Go app that collects jobs, scores them against your preferences, stores them in PostgreSQL, and sends digest emails when configured.
 
+For technical architecture, design constraints, and future-direction notes, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
 This repo is designed for single-user deployment:
 - one app instance
 - one database

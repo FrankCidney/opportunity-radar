@@ -70,6 +70,8 @@ func NewHandler(
 		"textareaLines":  textareaLines,
 		"contains":       contains,
 		"formatLookback": formatLookback,
+		"lookbackLabel":  lookbackLabel,
+		"lookbackValue":  lookbackValue,
 	}).ParseFS(templatesFS, "templates/*.html"))
 
 	staticRoot, err := fs.Sub(staticFS, "static")
@@ -109,20 +111,21 @@ func (h *Handler) Home(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.render(w, "index.html", pageData{
-		Title:                "Opportunity Radar",
-		ActiveNav:            "home",
-		State:                settings,
-		Flash:                r.URL.Query().Get("flash"),
-		Warnings:             statusWarnings(settings, h.schedulerEnabled, h.resendConfigured),
-		SetupReminder:        optionalSetupReminder(settings),
-		SchedulerEnabled:     h.schedulerEnabled,
-		ScheduleLabel:        h.scheduleLabel,
-		ResendConfigured:     h.resendConfigured,
-		RunStatus:            h.runStatus(),
-		ExperienceOptions:    ExperienceOptions,
-		WorkModeOptions:      WorkModeOptions,
-		LocationOptions:      LocationOptions,
-		EmailLookbackOptions: EmailLookbackOptions,
+		Title:                 "Opportunity Radar",
+		ActiveNav:             "home",
+		State:                 settings,
+		Flash:                 r.URL.Query().Get("flash"),
+		Warnings:              statusWarnings(settings, h.schedulerEnabled, h.resendConfigured),
+		SetupReminder:         optionalSetupReminder(settings),
+		SchedulerEnabled:      h.schedulerEnabled,
+		ScheduleLabel:         h.scheduleLabel,
+		ResendConfigured:      h.resendConfigured,
+		RunStatus:             h.runStatus(),
+		ExperienceOptions:     ExperienceOptions,
+		WorkModeOptions:       WorkModeOptions,
+		LocationOptions:       LocationOptions,
+		EmailLookbackOptions:  EmailLookbackOptions,
+		DigestLookbackOptions: DigestLookbackOptions,
 	})
 }
 
@@ -135,19 +138,20 @@ func (h *Handler) Setup(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.render(w, "setup.html", pageData{
-			Title:                "Set Up Opportunity Radar",
-			ActiveNav:            "onboarding",
-			State:                settings,
-			Flash:                r.URL.Query().Get("flash"),
-			Warnings:             onboardingWarnings(settings),
-			SchedulerEnabled:     h.schedulerEnabled,
-			ScheduleLabel:        h.scheduleLabel,
-			ResendConfigured:     h.resendConfigured,
-			RunStatus:            h.runStatus(),
-			ExperienceOptions:    ExperienceOptions,
-			WorkModeOptions:      WorkModeOptions,
-			LocationOptions:      LocationOptions,
-			EmailLookbackOptions: EmailLookbackOptions,
+			Title:                 "Set Up Opportunity Radar",
+			ActiveNav:             "onboarding",
+			State:                 settings,
+			Flash:                 r.URL.Query().Get("flash"),
+			Warnings:              onboardingWarnings(settings),
+			SchedulerEnabled:      h.schedulerEnabled,
+			ScheduleLabel:         h.scheduleLabel,
+			ResendConfigured:      h.resendConfigured,
+			RunStatus:             h.runStatus(),
+			ExperienceOptions:     ExperienceOptions,
+			WorkModeOptions:       WorkModeOptions,
+			LocationOptions:       LocationOptions,
+			EmailLookbackOptions:  EmailLookbackOptions,
+			DigestLookbackOptions: DigestLookbackOptions,
 		})
 	case http.MethodPost:
 		h.handleSetupSave(w, r)
@@ -174,20 +178,21 @@ func (h *Handler) ProfileSettings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.render(w, "profile.html", pageData{
-		Title:                "Profile",
-		ActiveNav:            "profile",
-		State:                settings,
-		Flash:                r.URL.Query().Get("flash"),
-		Warnings:             []string{"Changes here affect future scoring runs. Existing saved jobs are not automatically rescored."},
-		SetupReminder:        optionalSetupReminder(settings),
-		SchedulerEnabled:     h.schedulerEnabled,
-		ScheduleLabel:        h.scheduleLabel,
-		ResendConfigured:     h.resendConfigured,
-		RunStatus:            h.runStatus(),
-		ExperienceOptions:    ExperienceOptions,
-		WorkModeOptions:      WorkModeOptions,
-		LocationOptions:      LocationOptions,
-		EmailLookbackOptions: EmailLookbackOptions,
+		Title:                 "Profile",
+		ActiveNav:             "profile",
+		State:                 settings,
+		Flash:                 r.URL.Query().Get("flash"),
+		Warnings:              []string{"Changes here affect future scoring runs. Existing saved jobs are not automatically rescored."},
+		SetupReminder:         optionalSetupReminder(settings),
+		SchedulerEnabled:      h.schedulerEnabled,
+		ScheduleLabel:         h.scheduleLabel,
+		ResendConfigured:      h.resendConfigured,
+		RunStatus:             h.runStatus(),
+		ExperienceOptions:     ExperienceOptions,
+		WorkModeOptions:       WorkModeOptions,
+		LocationOptions:       LocationOptions,
+		EmailLookbackOptions:  EmailLookbackOptions,
+		DigestLookbackOptions: DigestLookbackOptions,
 	})
 }
 
@@ -200,18 +205,19 @@ func (h *Handler) ProfileEdit(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.render(w, "profile_edit.html", pageData{
-			Title:                "Edit Profile",
-			ActiveNav:            "profile",
-			State:                settings,
-			Flash:                r.URL.Query().Get("flash"),
-			SchedulerEnabled:     h.schedulerEnabled,
-			ScheduleLabel:        h.scheduleLabel,
-			ResendConfigured:     h.resendConfigured,
-			RunStatus:            h.runStatus(),
-			ExperienceOptions:    ExperienceOptions,
-			WorkModeOptions:      WorkModeOptions,
-			LocationOptions:      LocationOptions,
-			EmailLookbackOptions: EmailLookbackOptions,
+			Title:                 "Edit Profile",
+			ActiveNav:             "profile",
+			State:                 settings,
+			Flash:                 r.URL.Query().Get("flash"),
+			SchedulerEnabled:      h.schedulerEnabled,
+			ScheduleLabel:         h.scheduleLabel,
+			ResendConfigured:      h.resendConfigured,
+			RunStatus:             h.runStatus(),
+			ExperienceOptions:     ExperienceOptions,
+			WorkModeOptions:       WorkModeOptions,
+			LocationOptions:       LocationOptions,
+			EmailLookbackOptions:  EmailLookbackOptions,
+			DigestLookbackOptions: DigestLookbackOptions,
 		})
 	case http.MethodPost:
 		h.handleProfileSave(w, r)
@@ -233,19 +239,20 @@ func (h *Handler) DigestSettings(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.render(w, "notifications.html", pageData{
-			Title:                "Email Updates",
-			ActiveNav:            "notifications",
-			State:                settings,
-			Flash:                r.URL.Query().Get("flash"),
-			Warnings:             digestWarnings(settings, h.schedulerEnabled, h.resendConfigured),
-			SchedulerEnabled:     h.schedulerEnabled,
-			ScheduleLabel:        h.scheduleLabel,
-			ResendConfigured:     h.resendConfigured,
-			RunStatus:            h.runStatus(),
-			ExperienceOptions:    ExperienceOptions,
-			WorkModeOptions:      WorkModeOptions,
-			LocationOptions:      LocationOptions,
-			EmailLookbackOptions: EmailLookbackOptions,
+			Title:                 "Email Updates",
+			ActiveNav:             "notifications",
+			State:                 settings,
+			Flash:                 r.URL.Query().Get("flash"),
+			Warnings:              digestWarnings(settings, h.schedulerEnabled, h.resendConfigured),
+			SchedulerEnabled:      h.schedulerEnabled,
+			ScheduleLabel:         h.scheduleLabel,
+			ResendConfigured:      h.resendConfigured,
+			RunStatus:             h.runStatus(),
+			ExperienceOptions:     ExperienceOptions,
+			WorkModeOptions:       WorkModeOptions,
+			LocationOptions:       LocationOptions,
+			EmailLookbackOptions:  EmailLookbackOptions,
+			DigestLookbackOptions: DigestLookbackOptions,
 		})
 	case http.MethodPost:
 		h.handleDigestSave(w, r)
@@ -329,19 +336,20 @@ func (h *Handler) handleSetupSave(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.render(w, "setup.html", pageData{
-		Title:                "Set Up Opportunity Radar",
-		ActiveNav:            "onboarding",
-		State:                settings,
-		Flash:                flash,
-		Warnings:             warnings,
-		SchedulerEnabled:     h.schedulerEnabled,
-		ScheduleLabel:        h.scheduleLabel,
-		ResendConfigured:     h.resendConfigured,
-		RunStatus:            h.runStatus(),
-		ExperienceOptions:    ExperienceOptions,
-		WorkModeOptions:      WorkModeOptions,
-		LocationOptions:      LocationOptions,
-		EmailLookbackOptions: EmailLookbackOptions,
+		Title:                 "Set Up Opportunity Radar",
+		ActiveNav:             "onboarding",
+		State:                 settings,
+		Flash:                 flash,
+		Warnings:              warnings,
+		SchedulerEnabled:      h.schedulerEnabled,
+		ScheduleLabel:         h.scheduleLabel,
+		ResendConfigured:      h.resendConfigured,
+		RunStatus:             h.runStatus(),
+		ExperienceOptions:     ExperienceOptions,
+		WorkModeOptions:       WorkModeOptions,
+		LocationOptions:       LocationOptions,
+		EmailLookbackOptions:  EmailLookbackOptions,
+		DigestLookbackOptions: DigestLookbackOptions,
 	})
 }
 
@@ -581,6 +589,32 @@ func formatLookback(value time.Duration) string {
 		return "Not set yet"
 	}
 
+	if label := lookbackLabel(lookbackValue(value)); label != "" {
+		return label
+	}
+
+	hours := int(value / time.Hour)
+	if hours > 0 && value == time.Duration(hours)*time.Hour {
+		return strconv.Itoa(hours) + "h"
+	}
+
+	return value.String()
+}
+
+func lookbackLabel(value string) string {
+	for _, option := range DigestLookbackOptions {
+		if option.Value == strings.TrimSpace(value) {
+			return option.Label
+		}
+	}
+	return ""
+}
+
+func lookbackValue(value time.Duration) string {
+	if value <= 0 {
+		return ""
+	}
+
 	hours := int(value / time.Hour)
 	if hours > 0 && value == time.Duration(hours)*time.Hour {
 		return strconv.Itoa(hours) + "h"
@@ -590,20 +624,21 @@ func formatLookback(value time.Duration) string {
 }
 
 type pageData struct {
-	Title                string
-	ActiveNav            string
-	State                *Settings
-	Flash                string
-	Warnings             []string
-	SetupReminder        *setupReminder
-	SchedulerEnabled     bool
-	ScheduleLabel        string
-	ResendConfigured     bool
-	RunStatus            runcontrol.Status
-	ExperienceOptions    []string
-	WorkModeOptions      []string
-	LocationOptions      []string
-	EmailLookbackOptions []string
+	Title                 string
+	ActiveNav             string
+	State                 *Settings
+	Flash                 string
+	Warnings              []string
+	SetupReminder         *setupReminder
+	SchedulerEnabled      bool
+	ScheduleLabel         string
+	ResendConfigured      bool
+	RunStatus             runcontrol.Status
+	ExperienceOptions     []string
+	WorkModeOptions       []string
+	LocationOptions       []string
+	EmailLookbackOptions  []string
+	DigestLookbackOptions []DigestLookbackOption
 }
 
 type setupReminder struct {

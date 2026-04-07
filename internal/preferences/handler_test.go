@@ -316,11 +316,35 @@ func TestHomeFormatsLookbackWindowWithoutMinutesAndSeconds(t *testing.T) {
 	handler.Home(rec, req)
 
 	body := rec.Body.String()
-	if !strings.Contains(body, "<dd>24h</dd>") {
-		t.Fatalf("expected formatted 24h lookback, got body %q", body)
+	if !strings.Contains(body, "<dd>1 day</dd>") {
+		t.Fatalf("expected formatted 1 day lookback, got body %q", body)
 	}
 	if strings.Contains(body, "24h0m0s") {
 		t.Fatalf("did not expect raw duration string")
+	}
+}
+
+func TestDigestSettingsShowsFriendlyLookbackLabels(t *testing.T) {
+	service := &handlerStubService{
+		settings: &Settings{
+			SetupComplete:  true,
+			DigestTopN:     10,
+			DigestLookback: 120 * time.Hour,
+		},
+	}
+	handler := NewHandler(service, &stubScorerUpdater{}, &stubDigestUpdater{}, &stubRunController{}, true, true, "Every 24h", slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	req := httptest.NewRequest(http.MethodGet, "/settings/digest", nil)
+	rec := httptest.NewRecorder()
+
+	handler.DigestSettings(rec, req)
+
+	body := rec.Body.String()
+	if !strings.Contains(body, `<option value="120h" selected>5 days</option>`) {
+		t.Fatalf("expected 5 day option to be shown and selected, got body %q", body)
+	}
+	if !strings.Contains(body, `<option value="168h" >7 days</option>`) && !strings.Contains(body, `<option value="168h">7 days</option>`) {
+		t.Fatalf("expected 7 day option to be shown, got body %q", body)
 	}
 }
 

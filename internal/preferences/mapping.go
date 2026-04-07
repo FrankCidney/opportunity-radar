@@ -13,6 +13,14 @@ type roleFamilyDefinition struct {
 }
 
 var (
+	DigestLookbackOptions = []DigestLookbackOption{
+		{Value: "24h", Label: "1 day"},
+		{Value: "48h", Label: "2 days"},
+		{Value: "72h", Label: "3 days"},
+		{Value: "120h", Label: "5 days"},
+		{Value: "168h", Label: "7 days"},
+	}
+
 	ExperienceOptions = []string{
 		"Junior / early-career",
 		"Mid-level",
@@ -39,7 +47,7 @@ var (
 		"United States",
 	}
 
-	EmailLookbackOptions = []string{"24h", "48h", "72h"}
+	EmailLookbackOptions = []string{"24h", "48h", "72h", "120h", "168h"}
 
 	roleFamilyOrder = []string{
 		"backend",
@@ -107,6 +115,11 @@ var (
 		},
 	}
 )
+
+type DigestLookbackOption struct {
+	Value string
+	Label string
+}
 
 func (s *Settings) RecalculateDerivedFields() {
 	if s == nil {

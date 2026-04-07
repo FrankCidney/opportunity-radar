@@ -37,7 +37,7 @@
         <label class="field field-inline">
           <input type="checkbox" name="email_updates_enabled" {{if .State.DigestEnabled}}checked{{end}}>
           <div>
-            <span class="inline-label">Send me email updates after each daily run</span>
+            <span class="inline-label">Send me email updates after each scheduled run</span>
             <small>If no new jobs are found, the app still sends a status email so you know it ran successfully.</small>
           </div>
         </label>
@@ -62,8 +62,8 @@
           <span>How far back should we look?</span>
           <small>Keep this simple for now.</small>
           <select name="email_lookback">
-            {{range .EmailLookbackOptions}}
-              <option value="{{.}}" {{if eq $.State.DigestLookback.String .}}selected{{end}}>{{.}}</option>
+            {{range .DigestLookbackOptions}}
+              <option value="{{.Value}}" {{if eq (lookbackValue $.State.DigestLookback) .Value}}selected{{end}}>{{.Label}}</option>
             {{end}}
           </select>
         </label>

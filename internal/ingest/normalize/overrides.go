@@ -4,6 +4,8 @@ func applySourceOverrides(raw RawJob, job NormalizedJob) NormalizedJob {
 	switch raw.Source {
 	case "remotive":
 		job.Description = normalizeRemotiveDescription(raw)
+	case "brightermonday":
+		job.Description = normalizeBrighterMondayDescription(raw)
 	}
 
 	return job

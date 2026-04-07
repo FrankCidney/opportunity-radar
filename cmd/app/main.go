@@ -18,6 +18,7 @@ import (
 	"opportunity-radar/internal/runcontrol"
 	"opportunity-radar/internal/scheduler"
 	"opportunity-radar/internal/scoring"
+	"opportunity-radar/internal/scrapers/brightermonday"
 	"opportunity-radar/internal/scrapers/remotive"
 	"opportunity-radar/internal/shared/config"
 	"opportunity-radar/internal/shared/logger"
@@ -81,8 +82,9 @@ func main() {
 	pipeline := ingest.NewPipeline(scorer, jobsService, companyService, logr)
 
 	remotiveScraper := remotive.NewScraper(logr)
+	brighterMondayScraper := brightermonday.NewScraper(buildBrighterMondayConfig(settings), logr)
 
-	ingestService := ingest.NewService(pipeline, []ingest.Scraper{remotiveScraper}, logr)
+	ingestService := ingest.NewService(pipeline, []ingest.Scraper{remotiveScraper, brighterMondayScraper}, logr)
 	digestSender := buildDigestSender(cfg, logr)
 	digestService := digest.NewService(
 		digestRepo,

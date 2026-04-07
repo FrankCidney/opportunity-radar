@@ -24,10 +24,7 @@ var bulletPrefixes = []string{
 var whitespacePattern = regexp.MustCompile(`[\t\f\v ]+`)
 
 func normalizeRemotiveDescription(raw RawJob) string {
-	text, err := html2text.FromString(raw.Description, html2text.Options{})
-	if err != nil {
-		text = raw.Description
-	}
+	text := descriptionToPlainText(raw.Description)
 
 	text = cleanPlainTextDescription(text)
 
@@ -47,6 +44,72 @@ func normalizeRemotiveDescription(raw RawJob) string {
 	}
 
 	return strings.Join(metadata, "\n") + "\n\n" + text
+}
+
+func normalizeBrighterMondayDescription(raw RawJob) string {
+	text := descriptionToPlainText(raw.Description)
+
+	text = cleanPlainTextDescription(text)
+
+	var metadata []string
+	if raw.JobType != "" {
+		metadata = append(metadata, "Job type: "+strings.TrimSpace(raw.JobType))
+	}
+	if raw.Location != "" {
+		metadata = append(metadata, "Location: "+strings.TrimSpace(raw.Location))
+	}
+	if raw.Salary != "" {
+		metadata = append(metadata, "Salary: "+strings.TrimSpace(raw.Salary))
+	}
+	if value := rawDataString(raw.RawData, "experience_level"); value != "" {
+		metadata = append(metadata, "Experience level: "+value)
+	}
+	if value := rawDataString(raw.RawData, "experience_length"); value != "" {
+		metadata = append(metadata, "Experience length: "+value)
+	}
+	if value := rawDataString(raw.RawData, "qualification"); value != "" {
+		metadata = append(metadata, "Qualification: "+value)
+	}
+
+	if len(metadata) == 0 {
+		return text
+	}
+	if text == "" {
+		return strings.Join(metadata, "\n")
+	}
+
+	return strings.Join(metadata, "\n") + "\n\n" + text
+}
+
+func rawDataString(rawData map[string]interface{}, key string) string {
+	if len(rawData) == 0 {
+		return ""
+	}
+
+	value, ok := rawData[key]
+	if !ok {
+		return ""
+	}
+
+	stringValue, ok := value.(string)
+	if !ok {
+		return ""
+	}
+
+	return strings.TrimSpace(stringValue)
+}
+
+func descriptionToPlainText(raw string) string {
+	if !strings.Contains(raw, "<") || !strings.Contains(raw, ">") {
+		return raw
+	}
+
+	text, err := html2text.FromString(raw, html2text.Options{})
+	if err != nil {
+		return raw
+	}
+
+	return text
 }
 
 func cleanPlainTextDescription(raw string) string {

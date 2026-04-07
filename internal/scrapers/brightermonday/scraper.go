@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 
@@ -20,11 +21,12 @@ import (
 )
 
 const (
-	sourceID           = "brightermonday"
-	defaultBaseURL     = "https://www.brightermonday.co.ke"
-	defaultMaxPages    = 3
-	defaultHTTPTimeout = 15 * time.Second
-	defaultUserAgent   = "opportunity-radar/1.0 (+https://github.com/FrankCidney/opportunity-radar.git)"
+	sourceID            = "brightermonday"
+	defaultBaseURL      = "https://www.brightermonday.co.ke"
+	defaultMaxPages     = 3
+	defaultHTTPTimeout  = 15 * time.Second
+	defaultRequestDelay = 1 * time.Second
+	defaultUserAgent    = "opportunity-radar/1.0 (+https://github.com/FrankCidney/opportunity-radar.git)"
 )
 
 var (
@@ -51,14 +53,18 @@ type Config struct {
 	BaseURL         string
 	ListingPaths    []string
 	MaxPagesPerPath int
+	RequestDelay    time.Duration
 }
 
 type Scraper struct {
-	baseURL      *neturl.URL
-	listingPaths []string
-	maxPages     int
-	client       *http.Client
-	logger       *slog.Logger
+	baseURL       *neturl.URL
+	listingPaths  []string
+	maxPages      int
+	requestDelay  time.Duration
+	client        *http.Client
+	logger        *slog.Logger
+	requestMu     sync.Mutex
+	lastRequestAt time.Time
 }
 
 type listingCandidate struct {
@@ -89,6 +95,9 @@ type detailJob struct {
 }
 
 func NewScraper(cfg Config, logger *slog.Logger) *Scraper {
+	if cfg.RequestDelay == 0 {
+		cfg.RequestDelay = defaultRequestDelay
+	}
 	return newScraper(cfg, &http.Client{Timeout: defaultHTTPTimeout}, logger)
 }
 
@@ -125,6 +134,7 @@ func newScraper(cfg Config, client *http.Client, logger *slog.Logger) *Scraper {
 		baseURL:      parsedBase,
 		listingPaths: listingPaths,
 		maxPages:     maxPages,
+		requestDelay: cfg.RequestDelay,
 		client:       client,
 		logger:       logger,
 	}
@@ -209,6 +219,10 @@ func (s *Scraper) fetchDetail(ctx context.Context, rawURL string) (detailJob, er
 }
 
 func (s *Scraper) fetchHTML(ctx context.Context, rawURL string) (*html.Node, error) {
+	if err := s.waitForRequestSlot(ctx); err != nil {
+		return nil, err
+	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("build request: %w", err)
@@ -232,6 +246,32 @@ func (s *Scraper) fetchHTML(ctx context.Context, rawURL string) (*html.Node, err
 	}
 
 	return doc, nil
+}
+
+func (s *Scraper) waitForRequestSlot(ctx context.Context) error {
+	if s.requestDelay <= 0 {
+		return nil
+	}
+
+	s.requestMu.Lock()
+	defer s.requestMu.Unlock()
+
+	if !s.lastRequestAt.IsZero() {
+		wait := time.Until(s.lastRequestAt.Add(s.requestDelay))
+		if wait > 0 {
+			timer := time.NewTimer(wait)
+			defer timer.Stop()
+
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-timer.C:
+			}
+		}
+	}
+
+	s.lastRequestAt = time.Now()
+	return nil
 }
 
 func (s *Scraper) toRawJob(candidate listingCandidate, detail detailJob) normalize.RawJob {

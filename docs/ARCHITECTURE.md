@@ -273,7 +273,7 @@ This keeps the product focused on workflow and clarity rather than frontend comp
 
 The app is now structured for:
 - Docker Compose local/self-hosted deployment
-- future Fly.io deployment using the same codebase
+- Railway deployment using the same codebase
 
 Why this model:
 - one repository

@@ -16,7 +16,7 @@ There is no shared central server, no multi-user account system, and no SaaS con
 
 - Docker and Docker Compose for the local/self-hosted path
 - a Resend account only if you want real digest emails
-- your own Fly.io account only if you want the cloud path
+- a Railway account only if you want the hosted cloud path
 
 You do not need Go installed to run the Docker deployment.
 
@@ -137,63 +137,76 @@ After your first Docker run, you can verify things manually like this:
 8. restart with `docker compose down` then `docker compose up -d`
 9. confirm your saved settings are still there
 
-## Fly.io Deployment
+## Railway Deployment
 
-Fly.io is the recommended cloud path in this repo instead of Railway.
+Railway is the recommended hosted deployment path for this repo.
 
-This repo includes a starter [fly.toml.example](fly.toml.example). Copy it to `fly.toml` and edit the placeholder app name before deploying.
+This repo includes [railway.json](railway.json), which tells Railway to:
+- build from the root `Dockerfile`
+- run one app replica
+- keep application sleep disabled
+- restart on failure
 
-### Important scheduler note
+### Why GitHub deploy is preferred
 
-Opportunity Radar is a scheduled app, not a request-only app. Your Fly machine must stay running for the scheduler to fire on time.
+For this project, GitHub-connected deployment is the better default than deploying from your local machine because:
+- Railway can auto-deploy new commits from your chosen branch
+- deployment history stays tied to commits
+- updates later are simpler
+- you do not need to keep uploading source from your laptop
 
-The Fly config therefore keeps one machine running:
-- `auto_stop_machines = "off"`
-- `min_machines_running = 1`
+### What you will create on Railway
 
-### Basic Fly setup flow
+On Railway, you will create one project containing:
+- one PostgreSQL service
+- one app service connected to this GitHub repository
 
-1. Install `flyctl`
-2. Sign in to Fly
-3. Copy the config:
+The PostgreSQL service stores your data.
+The app service runs Opportunity Radar.
 
-```bash
-cp fly.toml.example fly.toml
-```
+### Railway setup flow
 
-4. Edit `fly.toml`
-5. Launch the app:
+1. Create a Railway account.
+2. Connect your GitHub account to Railway.
+3. Create a new Railway project.
+4. Add a PostgreSQL service to that project.
+5. Add a new service from GitHub and select this repository.
+6. Let Railway build the app from the committed `Dockerfile`.
+7. Set the required app variables in the Railway dashboard.
+8. Deploy the app service.
+9. Open the Railway-generated app URL.
+10. Complete onboarding and digest settings in the UI.
 
-```bash
-fly launch --no-deploy
-```
+### Variables to set on the Railway app service
 
-6. Create a Postgres cluster
-7. Attach or otherwise provide a `DATABASE_URL`
-8. Set app secrets:
+Add these variables in the app service `Variables` tab:
 
-```bash
-fly secrets set \
-  DATABASE_URL="your_database_url" \
-  RESEND_API_KEY="your_resend_key" \
-  RESEND_FROM_EMAIL="you@example.com" \
-  RESEND_FROM_NAME="Opportunity Radar"
-```
+- `DATABASE_URL=${{Postgres.DATABASE_URL}}`
+- `ENV=production`
+- `PORT=8080`
+- `SCHEDULER_ENABLED=true`
+- `SCHEDULER_INTERVAL=24h`
+- `SCHEDULER_RUN_ON_START=true`
+- `SCHEDULER_RUN_TIMEOUT=30m`
+- `RESEND_API_KEY=...`
+- `RESEND_FROM_EMAIL=you@example.com`
+- `RESEND_FROM_NAME=Opportunity Radar`
 
-9. Deploy:
+`DATABASE_URL=${{Postgres.DATABASE_URL}}` tells Railway to inject the database URL from the PostgreSQL service into the app service.
 
-```bash
-fly deploy
-```
+### Railway update flow later
 
-10. Open the app, complete onboarding, and set digest recipient/settings in the UI
+Once the service is connected to GitHub, the normal update path is:
 
-### Fly update flow later
+1. commit your changes
+2. push to GitHub
+3. Railway auto-deploys the connected branch
 
-```bash
-git pull
-fly deploy
-```
+If you later disable GitHub autodeploys, you can still trigger deploys manually from the Railway dashboard.
+
+### Important runtime note
+
+This app contains a process-local scheduler, so it is intended to stay running continuously in Railway rather than sleep between requests.
 
 ## Notes
 

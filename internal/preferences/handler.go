@@ -184,7 +184,7 @@ func (h *Handler) ProfileSettings(w http.ResponseWriter, r *http.Request) {
 		ActiveNav:             "profile",
 		State:                 settings,
 		Flash:                 r.URL.Query().Get("flash"),
-		Warnings:              []string{"Changes here affect future scoring runs. Existing saved jobs are not automatically rescored."},
+		Warnings:              []string{"Changes here affect future runs. Jobs already saved in the app will keep their current relevance order."},
 		SetupReminder:         optionalSetupReminder(settings),
 		SchedulerEnabled:      h.schedulerEnabled,
 		ScheduleLabel:         h.scheduleLabel,

@@ -44,7 +44,7 @@ func (r *Runner) RunAll(ctx context.Context) error {
 		}
 		if !canRun {
 			r.logger.Info("scheduled run skipped because setup is incomplete")
-			r.setLastSummary("Run skipped because setup is incomplete.")
+			r.setLastSummary("Run skipped because setup was incomplete.")
 			return nil
 		}
 	}

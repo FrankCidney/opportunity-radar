@@ -11,7 +11,7 @@
     <div class="brand">
       <p class="eyebrow">Email Updates</p>
       <h1>How results should reach you</h1>
-      <p class="subtitle">Clearer language than “digest”, while still matching the app’s real behavior.</p>
+      <p class="subtitle">Set up your email digest preferences here</p>
     </div>
   </header>
 
@@ -60,7 +60,7 @@
 
         <label class="field">
           <span>How far back should we look?</span>
-          <small>Keep this simple for now.</small>
+          <small>1 day, 2 days...</small>
           <select name="email_lookback">
             {{range .DigestLookbackOptions}}
               <option value="{{.Value}}" {{if eq (lookbackValue $.State.DigestLookback) .Value}}selected{{end}}>{{.Label}}</option>

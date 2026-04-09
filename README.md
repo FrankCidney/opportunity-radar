@@ -4,6 +4,18 @@ Opportunity Radar is a self-hosted Go app that collects jobs, scores them agains
 
 For technical architecture, design constraints, and future-direction notes, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
+## The Idea
+
+From a user's perspective, the app is meant to work like this:
+
+1. Open the app and fill in your job preferences.
+2. Optionally add your email address and turn on email updates.
+3. The app uses those preferences to decide which jobs are a better fit for you.
+4. Starting with the next scheduled run, which is usually the next day, the app collects jobs and prepares your recommendations.
+5. If email updates are enabled, you receive the recommended jobs by email.
+
+If you want to see it work immediately instead of waiting for the next scheduled run, you can use `Run Once` in the UI after setup.
+
 This repo is designed for single-user deployment:
 - one app instance
 - one database
@@ -12,6 +24,33 @@ This repo is designed for single-user deployment:
 
 There is no shared central server, no multi-user account system, and no SaaS control plane.
 
+## Getting Started
+
+To use this app for yourself, start by getting your own copy of the code.
+
+### Option 1: Clone it locally
+
+If you want to run it on your own machine with Docker:
+
+```bash
+git clone https://github.com/<your-account>/opportunity-radar.git
+cd opportunity-radar
+```
+
+### Option 2: Put it on your own GitHub first
+
+If you want to deploy on Railway, the cleanest path is:
+
+1. Fork this repo to your own GitHub account, or create a new repo in your GitHub account and push this code there.
+2. Clone your copy locally if you also want to edit it on your machine.
+3. Connect Railway to your GitHub copy of the repo.
+
+That way:
+
+- Railway deploys from your own repository
+- future updates are just commits and pushes
+- your deployment history stays tied to your own branch
+
 ## What You Need
 
 - Docker and Docker Compose for the local/self-hosted path
@@ -19,18 +58,6 @@ There is no shared central server, no multi-user account system, and no SaaS con
 - a Railway account only if you want the hosted cloud path
 
 You do not need Go installed to run the Docker deployment.
-
-## Runtime Behavior
-
-On startup, the app now:
-1. connects to PostgreSQL
-2. applies any pending SQL migrations automatically
-3. starts the admin UI
-4. checks whether required onboarding fields are complete before any automatic run
-5. runs ingest immediately when scheduler/startup config allows it and setup is complete
-6. continues on the configured schedule, but skips automatic runs until setup is complete
-
-Digest recipient, digest lookback, and digest top-N are configured in the UI after first launch.
 
 ## Environment Variables
 
@@ -51,7 +78,16 @@ These are the supported runtime variables:
 
 ## Local Docker Deployment
 
-### 1. Create your env file
+This path is for running Opportunity Radar on your own machine.
+
+### 1. Clone the repo
+
+```bash
+git clone https://github.com/<your-account>/opportunity-radar.git
+cd opportunity-radar
+```
+
+### 2. Create your env file
 
 ```bash
 cp .env.example .env
@@ -65,7 +101,7 @@ For Docker Compose, the default `DATABASE_URL` in `.env.example` already points 
 DATABASE_URL=postgres://postgres:postgres@postgres:5432/opportunity_radar?sslmode=disable
 ```
 
-### 2. Start the stack
+### 3. Start the stack
 
 ```bash
 docker compose up --build
@@ -77,7 +113,7 @@ If you want it detached:
 docker compose up --build -d
 ```
 
-### 3. Open the app
+### 4. Open the app
 
 Visit:
 
@@ -85,14 +121,14 @@ Visit:
 http://localhost:8080
 ```
 
-### 4. Complete first-run setup
+### 5. Complete first-run setup
 
 Use the UI to:
 - complete onboarding
 - set your role preferences
 - set digest recipient and digest settings
 
-### 5. Trigger a manual test run
+### 6. Trigger a manual test run
 
 Use the `Run Once` button in the UI and watch the logs:
 
@@ -148,15 +184,18 @@ This repo includes [railway.json](railway.json), which tells Railway to:
 - keep application sleep disabled
 - restart on failure
 
-### Why GitHub deploy is preferred
+### 1. Put the code in your own GitHub account
 
-For this project, GitHub-connected deployment is the better default than deploying from your local machine because:
+Fork this repo, or push it into a new repository in your own GitHub account.
+
+GitHub-connected deployment is the better default than deploying from your local machine because:
+
 - Railway can auto-deploy new commits from your chosen branch
 - deployment history stays tied to commits
 - updates later are simpler
 - you do not need to keep uploading source from your laptop
 
-### What you will create on Railway
+### 2. What you will create on Railway
 
 On Railway, you will create one project containing:
 - one PostgreSQL service
@@ -165,13 +204,13 @@ On Railway, you will create one project containing:
 The PostgreSQL service stores your data.
 The app service runs Opportunity Radar.
 
-### Railway setup flow
+### 3. Railway setup flow
 
 1. Create a Railway account.
 2. Connect your GitHub account to Railway.
 3. Create a new Railway project.
 4. Add a PostgreSQL service to that project.
-5. Add a new service from GitHub and select this repository.
+5. Add a new service from GitHub and select your repository copy of Opportunity Radar.
 6. Let Railway build the app from the committed `Dockerfile`.
 7. Set the required app variables in the Railway dashboard.
 8. Deploy the app service.
@@ -180,7 +219,7 @@ The app service runs Opportunity Radar.
 
 Automatic runs do not begin until the required onboarding fields have been completed in the UI.
 
-### Variables to set on the Railway app service
+### 4. Variables to set on the Railway app service
 
 Add these variables in the app service `Variables` tab:
 
@@ -197,19 +236,31 @@ Add these variables in the app service `Variables` tab:
 
 `DATABASE_URL=${{Postgres.DATABASE_URL}}` tells Railway to inject the database URL from the PostgreSQL service into the app service.
 
-### Railway update flow later
+### 5. Railway update flow later
 
 Once the service is connected to GitHub, the normal update path is:
 
 1. commit your changes
-2. push to GitHub
+2. push to your tracked branch on GitHub
 3. Railway auto-deploys the connected branch
 
 If you later disable GitHub autodeploys, you can still trigger deploys manually from the Railway dashboard.
 
-### Important runtime note
+### 6. Important runtime note
 
 This app contains a process-local scheduler, so it is intended to stay running continuously in Railway rather than sleep between requests. Automatic runs remain paused until onboarding is complete.
+
+## Runtime Behavior
+
+On startup, the app now:
+1. connects to PostgreSQL
+2. applies any pending SQL migrations automatically
+3. starts the admin UI
+4. checks whether required onboarding fields are complete before any automatic run
+5. runs ingest immediately when scheduler/startup config allows it and setup is complete
+6. continues on the configured schedule, but skips automatic runs until setup is complete
+
+Digest recipient, digest lookback, and digest top-N are configured in the UI after first launch.
 
 ## Notes
 

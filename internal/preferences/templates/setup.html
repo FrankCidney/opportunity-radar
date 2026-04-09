@@ -97,9 +97,17 @@
           <textarea name="avoid" rows="4">{{textareaLines .State.AvoidTerms}}</textarea>
         </label>
 
-        <label class="field field-wide" style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--line);">
+        <label class="field field-inline field-wide field-divider">
+          <input type="checkbox" name="email_updates_enabled" {{if .State.DigestEnabled}}checked{{end}}>
+          <div>
+            <span class="inline-label">Send me email updates after each scheduled run</span>
+            <small>Optional. You can keep this off for now and turn it on later.</small>
+          </div>
+        </label>
+
+        <label class="field field-wide">
           <span>Where should email updates go?</span>
-          <small>Example: francis@example.com</small>
+          <small>Optional. Example: francis@example.com</small>
           <input type="email" name="email_destination" value="{{.State.DigestRecipient}}">
         </label>
 

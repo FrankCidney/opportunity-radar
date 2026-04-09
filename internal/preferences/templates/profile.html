@@ -53,7 +53,12 @@
           <p class="eyebrow">What Opportunity Radar should optimize for</p>
           <h2>{{if not .State.SetupComplete}}Setup still needs attention{{else if .SetupReminder}}Setup is almost done{{else}}Setup is complete{{end}}</h2>
         </div>
-        {{if or (not .State.SetupComplete) .SetupReminder}}<a class="button button-secondary" href="/setup">Finish onboarding</a>{{end}}
+        <div class="section-actions">
+          {{if or (not .State.SetupComplete) .SetupReminder}}<a class="button button-secondary" href="/setup">Finish onboarding</a>{{end}}
+          <form method="post" action="/settings/profile/reset">
+            <button class="button button-danger" type="submit">Clear profile</button>
+          </form>
+        </div>
       </div>
 
       <div class="summary-grid">

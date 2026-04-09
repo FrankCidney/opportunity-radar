@@ -100,7 +100,7 @@ func main() {
 		toDigestConfig(settings),
 		logr,
 	)
-	digestRunner := digest.NewRunner(ingestService, digestService, logr)
+	digestRunner := digest.NewRunner(ingestService, preferencesService, digestService, logr)
 	runCoordinator := runcontrol.New(digestRunner, logr)
 	adminHandler := preferences.NewHandler(
 		preferencesService,

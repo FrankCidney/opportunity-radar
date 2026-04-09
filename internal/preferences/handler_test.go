@@ -34,6 +34,7 @@ func TestSetupPostSavesSettingsAndUpdatesScorer(t *testing.T) {
 	form.Add("work_modes", "Remote")
 	form.Set("current_skills", "go\ngolang")
 	form.Set("avoid", "sales")
+	form.Set("email_updates_enabled", "on")
 	form.Set("email_destination", "me@example.com")
 
 	req := httptest.NewRequest(http.MethodPost, "/setup", strings.NewReader(form.Encode()))
@@ -50,6 +51,12 @@ func TestSetupPostSavesSettingsAndUpdatesScorer(t *testing.T) {
 	}
 	if len(scorer.profile.RoleKeywords) == 0 {
 		t.Fatalf("expected scorer profile to be updated")
+	}
+	if !service.settings.DigestEnabled {
+		t.Fatalf("expected email updates to be enabled from onboarding")
+	}
+	if got := digestService.config.Recipient; got != "me@example.com" {
+		t.Fatalf("unexpected digest recipient: got %q", got)
 	}
 }
 
@@ -186,6 +193,117 @@ func TestDigestPostSavesSettingsAndUpdatesService(t *testing.T) {
 	}
 	if got := digestService.config.TopN; got != 15 {
 		t.Fatalf("unexpected digest top n: got %d", got)
+	}
+}
+
+func TestProfileResetClearsProfileFieldsAndRedirectsToSetup(t *testing.T) {
+	service := &handlerStubService{
+		settings: &Settings{
+			SetupComplete:   true,
+			DesiredRoles:    []string{"backend engineer"},
+			ExperienceLevel: "Junior / early-career",
+			CurrentSkills:   []string{"go"},
+			GrowthSkills:    []string{"python"},
+			Locations:       []string{"remote"},
+			WorkModes:       []string{"remote"},
+			AvoidTerms:      []string{"sales"},
+			DigestEnabled:   true,
+			DigestRecipient: "me@example.com",
+			DigestTopN:      10,
+			DigestLookback:  24 * time.Hour,
+		},
+	}
+	scorer := &stubScorerUpdater{}
+	handler := NewHandler(service, scorer, &stubDigestUpdater{}, &stubRunController{}, true, true, "Every 24h", slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	req := httptest.NewRequest(http.MethodPost, "/settings/profile/reset", nil)
+	rec := httptest.NewRecorder()
+
+	handler.ProfileReset(rec, req)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("unexpected status: got %d want 303", rec.Code)
+	}
+	if location := rec.Header().Get("Location"); location != "/setup?flash=Profile+preferences+cleared.+Complete+setup+again+when+you+are+ready." {
+		t.Fatalf("unexpected redirect location: %q", location)
+	}
+	if service.settings.SetupComplete {
+		t.Fatalf("expected setup to become incomplete after profile reset")
+	}
+	if len(service.settings.DesiredRoles) != 0 || service.settings.ExperienceLevel != "" || len(service.settings.Locations) != 0 || len(service.settings.WorkModes) != 0 {
+		t.Fatalf("expected required profile fields to be cleared")
+	}
+	if len(scorer.profile.RoleKeywords) != 0 {
+		t.Fatalf("expected scorer profile to be cleared")
+	}
+	if !service.settings.DigestEnabled || service.settings.DigestRecipient != "me@example.com" {
+		t.Fatalf("expected email settings to be preserved during profile reset")
+	}
+}
+
+func TestDigestResetClearsEmailSettingsAndUpdatesService(t *testing.T) {
+	service := &handlerStubService{
+		settings: &Settings{
+			SetupComplete:   true,
+			DigestEnabled:   true,
+			DigestRecipient: "user@example.com",
+			DigestTopN:      15,
+			DigestLookback:  48 * time.Hour,
+		},
+	}
+	digestService := &stubDigestUpdater{}
+	handler := NewHandler(service, &stubScorerUpdater{}, digestService, &stubRunController{}, true, true, "Every 24h", slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	req := httptest.NewRequest(http.MethodPost, "/settings/digest/reset", nil)
+	rec := httptest.NewRecorder()
+
+	handler.DigestReset(rec, req)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("unexpected status: got %d want 303", rec.Code)
+	}
+	if location := rec.Header().Get("Location"); location != "/settings/digest?flash=Email+update+settings+cleared." {
+		t.Fatalf("unexpected redirect location: %q", location)
+	}
+	if service.settings.DigestEnabled {
+		t.Fatalf("expected email updates to be disabled")
+	}
+	if service.settings.DigestRecipient != "" {
+		t.Fatalf("expected recipient to be cleared, got %q", service.settings.DigestRecipient)
+	}
+	if service.settings.DigestTopN != 10 {
+		t.Fatalf("expected top n to reset to default 10, got %d", service.settings.DigestTopN)
+	}
+	if service.settings.DigestLookback != 24*time.Hour {
+		t.Fatalf("expected lookback to reset to 24h, got %s", service.settings.DigestLookback)
+	}
+	if digestService.config.Enabled {
+		t.Fatalf("expected digest runtime config to be disabled")
+	}
+}
+
+func TestSetupPageShowsEmailUpdatesToggle(t *testing.T) {
+	service := &handlerStubService{
+		settings: &Settings{
+			DigestEnabled:   true,
+			DigestRecipient: "me@example.com",
+			DigestTopN:      10,
+			DigestLookback:  24 * time.Hour,
+		},
+	}
+	handler := NewHandler(service, &stubScorerUpdater{}, &stubDigestUpdater{}, &stubRunController{}, true, true, "Every 24h", slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	req := httptest.NewRequest(http.MethodGet, "/setup", nil)
+	rec := httptest.NewRecorder()
+
+	handler.Setup(rec, req)
+
+	body := rec.Body.String()
+	if !strings.Contains(body, "Send me email updates after each scheduled run") {
+		t.Fatalf("expected onboarding email updates toggle")
+	}
+	if !strings.Contains(body, `name="email_updates_enabled" checked`) {
+		t.Fatalf("expected onboarding toggle to reflect saved state")
 	}
 }
 

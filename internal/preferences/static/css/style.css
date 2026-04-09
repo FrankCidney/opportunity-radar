@@ -177,6 +177,8 @@ dd { margin: 0; font-size: 1.05rem; font-weight: 500; }
 .button-primary:hover { background: var(--accent-strong); box-shadow: var(--shadow); transform: translateY(-1px); }
 .button-secondary { background: var(--surface); border-color: #cbd5e1; color: var(--text); }
 .button-secondary:hover { background: var(--surface-strong); border-color: #94a3b8; box-shadow: var(--shadow); transform: translateY(-1px); }
+.button-danger { background: #fff1f2; border-color: #fecdd3; color: #be123c; }
+.button-danger:hover { background: #ffe4e6; border-color: #fda4af; box-shadow: var(--shadow); transform: translateY(-1px); }
 
 .field {
   display: grid;
@@ -220,6 +222,20 @@ textarea { resize: vertical; }
   padding-top: 1rem;
   border-top: 1px solid var(--line);
   margin-top: 1rem;
+}
+.field-divider {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+}
+.section-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+.section-actions form {
+  margin: 0;
 }
 .check-grid {
   display: grid;

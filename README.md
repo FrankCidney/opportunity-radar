@@ -26,8 +26,9 @@ On startup, the app now:
 1. connects to PostgreSQL
 2. applies any pending SQL migrations automatically
 3. starts the admin UI
-4. runs ingest immediately when scheduler/startup config allows it
-5. continues on the configured schedule
+4. checks whether required onboarding fields are complete before any automatic run
+5. runs ingest immediately when scheduler/startup config allows it and setup is complete
+6. continues on the configured schedule, but skips automatic runs until setup is complete
 
 Digest recipient, digest lookback, and digest top-N are configured in the UI after first launch.
 
@@ -177,6 +178,8 @@ The app service runs Opportunity Radar.
 9. Open the Railway-generated app URL.
 10. Complete onboarding and digest settings in the UI.
 
+Automatic runs do not begin until the required onboarding fields have been completed in the UI.
+
 ### Variables to set on the Railway app service
 
 Add these variables in the app service `Variables` tab:
@@ -206,7 +209,7 @@ If you later disable GitHub autodeploys, you can still trigger deploys manually 
 
 ### Important runtime note
 
-This app contains a process-local scheduler, so it is intended to stay running continuously in Railway rather than sleep between requests.
+This app contains a process-local scheduler, so it is intended to stay running continuously in Railway rather than sleep between requests. Automatic runs remain paused until onboarding is complete.
 
 ## Notes
 

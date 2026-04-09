@@ -11,8 +11,13 @@ type IngestRunner interface {
 	RunAll(ctx context.Context) error
 }
 
+type RunEligibilityChecker interface {
+	CanRun(ctx context.Context) (bool, error)
+}
+
 type Runner struct {
 	ingestRunner IngestRunner
+	eligibility  RunEligibilityChecker
 	digest       *Service
 	logger       *slog.Logger
 	now          func() time.Time
@@ -20,9 +25,10 @@ type Runner struct {
 	lastSummary  string
 }
 
-func NewRunner(ingestRunner IngestRunner, digest *Service, logger *slog.Logger) *Runner {
+func NewRunner(ingestRunner IngestRunner, eligibility RunEligibilityChecker, digest *Service, logger *slog.Logger) *Runner {
 	return &Runner{
 		ingestRunner: ingestRunner,
+		eligibility:  eligibility,
 		digest:       digest,
 		logger:       logger,
 		now:          time.Now,
@@ -30,6 +36,19 @@ func NewRunner(ingestRunner IngestRunner, digest *Service, logger *slog.Logger) 
 }
 
 func (r *Runner) RunAll(ctx context.Context) error {
+	if r.eligibility != nil {
+		canRun, err := r.eligibility.CanRun(ctx)
+		if err != nil {
+			r.setLastSummary("Run failed before ingest.")
+			return err
+		}
+		if !canRun {
+			r.logger.Info("scheduled run skipped because setup is incomplete")
+			r.setLastSummary("Run skipped because setup is incomplete.")
+			return nil
+		}
+	}
+
 	if err := r.ingestRunner.RunAll(ctx); err != nil {
 		r.setLastSummary("Run failed during ingest.")
 		return err

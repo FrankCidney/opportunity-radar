@@ -80,6 +80,18 @@ func (s *Service) Ensure(ctx context.Context, bootstrap *Settings) (*Settings, b
 	return settings, true, nil
 }
 
+func (s *Service) CanRun(ctx context.Context) (bool, error) {
+	settings, err := s.Get(ctx)
+	if err != nil {
+		if errors.Is(err, ErrSettingsNotFound) {
+			return false, nil
+		}
+		return false, err
+	}
+
+	return IsSetupComplete(settings), nil
+}
+
 func normalizeSettings(input *Settings) *Settings {
 	if input == nil {
 		input = &Settings{}

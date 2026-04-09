@@ -161,7 +161,9 @@ func (h *Handler) Setup(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) ProfileSettings(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
+	switch r.Method {
+	case http.MethodGet:
+	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
@@ -194,6 +196,28 @@ func (h *Handler) ProfileSettings(w http.ResponseWriter, r *http.Request) {
 		EmailLookbackOptions:  EmailLookbackOptions,
 		DigestLookbackOptions: DigestLookbackOptions,
 	})
+}
+
+func (h *Handler) ProfileReset(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Redirect(w, r, "/settings/profile", http.StatusSeeOther)
+		return
+	}
+
+	settings, err := h.loadSettings(r.Context())
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "failed to load settings", err)
+		return
+	}
+
+	resetProfileSettings(settings)
+	if err := h.service.Save(r.Context(), settings); err != nil {
+		h.writeError(w, http.StatusInternalServerError, "failed to reset profile settings", err)
+		return
+	}
+
+	h.scorer.SetProfile(BuildScoringProfile(settings))
+	http.Redirect(w, r, "/setup?flash=Profile+preferences+cleared.+Complete+setup+again+when+you+are+ready.", http.StatusSeeOther)
 }
 
 func (h *Handler) ProfileEdit(w http.ResponseWriter, r *http.Request) {
@@ -261,6 +285,34 @@ func (h *Handler) DigestSettings(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (h *Handler) DigestReset(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Redirect(w, r, "/settings/digest", http.StatusSeeOther)
+		return
+	}
+
+	settings, err := h.loadSettings(r.Context())
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "failed to load settings", err)
+		return
+	}
+
+	resetDigestSettings(settings)
+	if err := h.service.Save(r.Context(), settings); err != nil {
+		h.writeError(w, http.StatusInternalServerError, "failed to reset email update settings", err)
+		return
+	}
+
+	h.digestService.UpdateConfig(digest.Config{
+		Enabled:   settings.DigestEnabled,
+		Recipient: settings.DigestRecipient,
+		TopN:      settings.DigestTopN,
+		Lookback:  settings.DigestLookback,
+	})
+
+	http.Redirect(w, r, "/settings/digest?flash=Email+update+settings+cleared.", http.StatusSeeOther)
+}
+
 func (h *Handler) RunOnce(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Redirect(w, r, "/", http.StatusSeeOther)
@@ -305,6 +357,7 @@ func (h *Handler) handleSetupSave(w http.ResponseWriter, r *http.Request) {
 	}
 
 	populateProfileFromForm(settings, r)
+	settings.DigestEnabled = r.FormValue("email_updates_enabled") == "on"
 	settings.DigestRecipient = strings.TrimSpace(r.FormValue("email_destination"))
 	settings.RecalculateDerivedFields()
 
@@ -315,6 +368,12 @@ func (h *Handler) handleSetupSave(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.scorer.SetProfile(BuildScoringProfile(settings))
+	h.digestService.UpdateConfig(digest.Config{
+		Enabled:   settings.DigestEnabled,
+		Recipient: settings.DigestRecipient,
+		TopN:      settings.DigestTopN,
+		Lookback:  settings.DigestLookback,
+	})
 	if settings.SetupComplete {
 		if len(missingRecommendedSetupFields(settings)) == 0 {
 			http.Redirect(w, r, "/settings/profile?flash=Setup+complete.+You+can+edit+these+settings+any+time.", http.StatusSeeOther)
@@ -463,6 +522,32 @@ func populateProfileFromForm(settings *Settings, r *http.Request) {
 	settings.Locations = parseValues(r.Form["locations"])
 	settings.WorkModes = parseValues(r.Form["work_modes"])
 	settings.AvoidTerms = parseLines(r.FormValue("avoid"))
+}
+
+func resetProfileSettings(settings *Settings) {
+	if settings == nil {
+		return
+	}
+
+	settings.DesiredRoles = []string{}
+	settings.ExperienceLevel = ""
+	settings.CurrentSkills = []string{}
+	settings.GrowthSkills = []string{}
+	settings.Locations = []string{}
+	settings.WorkModes = []string{}
+	settings.AvoidTerms = []string{}
+	settings.RecalculateDerivedFields()
+}
+
+func resetDigestSettings(settings *Settings) {
+	if settings == nil {
+		return
+	}
+
+	settings.DigestEnabled = false
+	settings.DigestRecipient = ""
+	settings.DigestTopN = effectiveDigestTopN(0)
+	settings.DigestLookback = effectiveDigestLookback(0)
 }
 
 func parseLines(value string) []string {

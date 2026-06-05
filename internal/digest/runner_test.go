@@ -21,7 +21,7 @@ func TestRunnerSkipsWhenSetupIsIncomplete(t *testing.T) {
 	if ingestRunner.called {
 		t.Fatal("expected ingest runner not to be called")
 	}
-	if got := runner.LastSummary(); got != "Run skipped because setup is incomplete." {
+	if got := runner.LastSummary(); got != "Run skipped because setup was incomplete." {
 		t.Fatalf("unexpected summary: got %q", got)
 	}
 }

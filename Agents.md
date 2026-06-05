@@ -33,6 +33,7 @@ The current product direction is intentionally single-tenant and self-hosted:
 - `internal/scheduler`: periodic execution and runtime coordination
 - `internal/scrapers/remotive`: concrete scraper implementation
 - `internal/scrapers/brightermonday`: concrete scraper implementation
+- `internal/scrapers/fuzu`: concrete scraper implementation for Kenya-local jobs
 - `internal/shared/config`: environment/config loading
 - `internal/shared/logger`: `slog` setup
 - `migrations`: schema evolution
@@ -242,12 +243,13 @@ Current BrighterMonday-specific behavior worth knowing:
 - pagination is bounded and requests are intentionally conservative
 - source-specific description cleanup is handled through normalization overrides
 
-Current Fuzu implementation planning worth knowing:
+Current Fuzu implementation worth knowing:
 
-- the next planned local source is `Fuzu`
-- reconnaissance suggests Fuzu should also use a two-step `listing page -> detail page` approach
-- the preferred first listing path is `https://www.fuzu.com/kenya/job/computers-software-development`
-- implementation notes and checklist live in [fuzu_implementation.md](/home/frawuor/projects/personal/opportunity-radar/fuzu_implementation.md)
+- implemented as a two-step `listing page -> detail page` scraper
+- uses JSON-LD structured data extraction (ItemList on listing, JobPosting on detail)
+- defaults to `/kenya/job/computers-software-development` listing path
+- includes conservative pagination (max 3 pages)
+- implementation notes live in [notes.md](/home/frawuor/projects/personal/opportunity-radar/notes.md)
 
 Scheduler/runtime behavior worth knowing:
 
@@ -345,6 +347,7 @@ For quick orientation, start with:
 - `internal/ingest/normalize/default.go`
 - `internal/ingest/normalize/overrides.go`
 - `internal/ingest/normalize/description.go`
+- `internal/scrapers/fuzu/scraper.go`
 - `internal/jobs/service.go`
 - `internal/jobs/postgres.go`
 - `internal/companies/service.go`

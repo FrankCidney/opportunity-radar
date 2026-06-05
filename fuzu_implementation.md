@@ -504,3 +504,23 @@ If starting in a new chat, the task is:
 - wire it into `cmd/app/main.go`
 - add tests similar to the existing `BrighterMonday` and `Remotive` scraper tests
 - create `notes.md` during implementation to explain the end-to-end scraper integration flow through the codebase
+
+## Implementation Status
+
+### Completed
+
+- Created `internal/scrapers/fuzu/scraper.go` with JSON-LD-based parsing
+- Created `internal/scrapers/fuzu/scraper_test.go` with comprehensive tests
+- Wired Fuzu into `cmd/app/main.go`
+- Created `notes.md` documenting the integration flow
+- Fixed pre-existing test in `internal/digest/runner_test.go` (string mismatch)
+
+### Key Decisions Made
+
+1. **JSON-LD Extraction**: Fuzu provides structured `ItemList` on listing pages and `JobPosting` on detail pages. This is the primary parsing method with HTML fallback.
+
+2. **No Normalization Override**: Fuzu descriptions are already extracted as clean text from JSON-LD HTML content. No source-specific override needed (cancelled that todo).
+
+3. **Simple Configuration**: Like the plan suggested, Fuzu uses a static listing path without complex config derivation.
+
+4. **Description Handling**: The `cleanDescriptionSections` function removes "requirements" and "qualifications" markers that appear to duplicate content in Fuzu's JSON-LD.

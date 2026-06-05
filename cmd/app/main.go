@@ -19,6 +19,7 @@ import (
 	"opportunity-radar/internal/scheduler"
 	"opportunity-radar/internal/scoring"
 	"opportunity-radar/internal/scrapers/brightermonday"
+	"opportunity-radar/internal/scrapers/fuzu"
 	"opportunity-radar/internal/scrapers/remotive"
 	"opportunity-radar/internal/shared/config"
 	"opportunity-radar/internal/shared/logger"
@@ -89,8 +90,9 @@ func main() {
 
 	remotiveScraper := remotive.NewScraper(logr)
 	brighterMondayScraper := brightermonday.NewScraper(buildBrighterMondayConfig(settings), logr)
+	fuzuScraper := fuzu.NewScraper(fuzu.Config{MaxPagesPerPath: 3}, logr)
 
-	ingestService := ingest.NewService(pipeline, []ingest.Scraper{remotiveScraper, brighterMondayScraper}, logr)
+	ingestService := ingest.NewService(pipeline, []ingest.Scraper{remotiveScraper, brighterMondayScraper, fuzuScraper}, logr)
 	digestSender := buildDigestSender(cfg, logr)
 	digestService := digest.NewService(
 		digestRepo,

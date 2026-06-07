@@ -12,7 +12,7 @@ The product goal is practical rather than generic:
 
 This is currently a single Go application with PostgreSQL persistence, SQL migrations, a lightweight ingest pipeline, and room for future HTTP/UI work.
 
-Right now, `cmd/app` runs a production-style in-process scheduler that checks persisted onboarding state before automatic runs, skips scheduled work until required setup fields are complete, then runs ingest followed by the daily digest workflow and continues daily by default. The digest can send through Resend when configured and falls back to logging otherwise. The app also now has a real server-rendered admin UI for onboarding, profile editing, email update settings, reset/clear actions, and manual runs. The current near-term implementation focus is adding richer ingest coverage, starting with a Kenya-local `Fuzu` scraper as the next planned source.
+Right now, `cmd/app` runs a production-style in-process scheduler that checks persisted onboarding state before automatic runs, skips scheduled work until required setup fields are complete, then runs ingest followed by the daily digest workflow and continues daily by default. The digest can send through Resend when configured and falls back to logging otherwise. The app also now has a real server-rendered admin UI for onboarding, profile editing, email update settings, reset/clear actions, and manual runs. The database migrator features self-healing compatibility with CLI-driven migrations and pre-existing tables. The current near-term focus is transitioning to a multi-user architecture (see [multi-user-plan.md](file:///home/francis/projects/my-repos/opportunity-radar/multi-user-plan.md) in the root).
 
 The current product direction is intentionally single-tenant and self-hosted:
 

@@ -6,13 +6,13 @@
 
 The project is still early, but the core ingest path is now taking shape:
 
-- two scraper implementations exist: `remotive` and `brightermonday`
+- three scraper implementations exist: `remotive`, `brightermonday`, and `fuzu`
 - raw jobs are normalized into internal models
 - companies are resolved or created before jobs are saved
 - jobs are scored with a weighted profile-driven rule-based scorer
 - jobs and companies both have repository and service layers
 - `cmd/app` can now gate automatic runs on completed setup, continue on a daily scheduler, send a daily digest of top-scored jobs through Resend when configured, and serve a preview-based real admin/settings UI
-- the next planned local source is `fuzu`
+- the database migrator features self-healing compatibility with CLI-driven migrations and pre-existing tables
 
 ## What Exists Today
 
@@ -32,6 +32,7 @@ It currently wires together:
 - ingest pipeline
 - `remotive` scraper
 - `brightermonday` scraper
+- `fuzu` scraper
 - ingest service
 - digest service
 - digest runner/orchestrator
@@ -231,10 +232,11 @@ This is still a heuristic scorer, but it is much closer to the current product g
 
 ## Scrapers
 
-There are currently two implemented scrapers:
+There are currently three implemented scrapers:
 
 - [remotive scraper](/home/frawuor/projects/personal/opportunity-radar/internal/scrapers/remotive/scraper.go)
 - [brightermonday scraper](/home/frawuor/projects/personal/opportunity-radar/internal/scrapers/brightermonday/scraper.go)
+- [fuzu scraper](/home/frawuor/projects/personal/opportunity-radar/internal/scrapers/fuzu/scraper.go)
 
 ### Remotive
 
@@ -257,25 +259,16 @@ The BrighterMonday scraper:
 - derives external IDs from job URLs
 - keeps requests intentionally conservative with a small request delay
 
+### Fuzu
+
+The Fuzu scraper:
+
+- is a two-step HTML scraper targeting computers/software development jobs
+- parses listings using listing pagination (up to 3 pages)
+- extracts structured job data (ItemList and JobPosting formats) from listing and detail pages
+- extracts descriptions, requirements, location, and metadata
+
 Together, these establish the current scraper contract and patterns for future source integrations.
-
-## Next Source
-
-The current planned local-source expansion is `Fuzu`.
-
-Reconnaissance so far suggests:
-
-- Fuzu should likely be implemented as a two-step `listing page -> detail page` scraper
-- the best first listing path is `https://www.fuzu.com/kenya/job/computers-software-development`
-- useful public example pages reviewed include:
-  - `https://www.fuzu.com/kenya/job/computers-software-development`
-  - `https://www.fuzu.com/kenya/job/software-engineer`
-  - `https://www.fuzu.com/kenya/jobs/assistant-software-developer-christian-health-association-of-kenya`
-  - `https://www.fuzu.com/kenya/jobs/engineer-backend-microservices-safaricom`
-
-Implementation checklist and handoff context live in:
-
-- [fuzu_implementation.md](/home/frawuor/projects/personal/opportunity-radar/fuzu_implementation.md)
 
 ## Shared Utilities
 
@@ -610,10 +603,10 @@ The code currently passes `go test ./...`, but there is not yet meaningful autom
 
 Today, the project is best described as:
 
-- ingest core: partially implemented and coherent
+- ingest core: implemented and coherent
 - persistence layer: implemented for jobs and companies
 - scoring: implemented at a basic level
-- scraper support: one source implemented
+- scraper support: three sources implemented (Remotive, BrighterMonday, Fuzu)
 - scheduler: implemented for single-process daily execution
 - daily digest: implemented with persisted send tracking and Resend delivery support
 - HTTP/UI: admin/setup/settings UI implemented; jobs/companies API/UI still incomplete
@@ -634,13 +627,14 @@ The near-term goal is to make the app easy to clone, configure, and run locally 
 
 ## Immediate Next Step
 
-The scheduler, digest plumbing, and first email provider integration are now in place, so the next major feature is likely to be one of:
+The scheduler, digest plumbing, and first email provider integration are now in place, so the next major feature is:
 
-Natural next implementation areas now look like:
+- planning and migrating to a multi-user architecture (see [multi-user-plan.md](file:///home/francis/projects/my-repos/opportunity-radar/multi-user-plan.md))
+
+Other next implementation areas include:
 
 - exposing jobs and companies through handlers/routes
 - adding stronger automated coverage for ingest and repository behavior
 - formalizing the sentinel unknown-company behavior
-- adding more scrapers and richer scoring logic
 
 This file should be updated as those decisions are made and implemented.

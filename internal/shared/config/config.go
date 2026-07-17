@@ -22,6 +22,7 @@ type Config struct {
 	ResendFromName         string
 	PublicBaseURL          string
 	RegistrationEnabled    bool
+	TrustProxyHeaders      bool
 	AuthCSRFKey            string
 	AuthSessionTTL         time.Duration
 	AuthVerificationTTL    time.Duration
@@ -120,6 +121,10 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	trustProxyHeaders, err := getEnvBool("TRUST_PROXY_HEADERS", false)
+	if err != nil {
+		return Config{}, err
+	}
 	authSessionTTL, err := getEnvDuration("AUTH_SESSION_TTL", 30*24*time.Hour)
 	if err != nil {
 		return Config{}, err
@@ -150,8 +155,8 @@ func Load() (Config, error) {
 		if err := validateProductionBaseURL(publicBaseURL); err != nil {
 			return Config{}, err
 		}
-		if registrationEnabled && (resendAPIKey == "" || resendFromEmail == "") {
-			return Config{}, fmt.Errorf("RESEND_API_KEY and RESEND_FROM_EMAIL are required when registration is enabled in production")
+		if resendAPIKey == "" || resendFromEmail == "" {
+			return Config{}, fmt.Errorf("RESEND_API_KEY and RESEND_FROM_EMAIL are required for account email in production")
 		}
 	} else {
 		if authCSRFKey == "" {
@@ -178,6 +183,7 @@ func Load() (Config, error) {
 		ResendFromName:         getEnv("RESEND_FROM_NAME", ""),
 		PublicBaseURL:          publicBaseURL,
 		RegistrationEnabled:    registrationEnabled,
+		TrustProxyHeaders:      trustProxyHeaders,
 		AuthCSRFKey:            authCSRFKey,
 		AuthSessionTTL:         authSessionTTL,
 		AuthVerificationTTL:    authVerificationTTL,
@@ -192,6 +198,9 @@ func validateProductionBaseURL(value string) error {
 	if err != nil || parsed.Scheme != "https" || parsed.Host == "" ||
 		parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
 		return fmt.Errorf("PUBLIC_BASE_URL must be an HTTPS origin without credentials, query, or fragment in production")
+	}
+	if parsed.Path != "" && parsed.Path != "/" {
+		return fmt.Errorf("PUBLIC_BASE_URL must not contain a path in production")
 	}
 	return nil
 }

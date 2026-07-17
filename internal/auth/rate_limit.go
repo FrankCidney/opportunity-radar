@@ -3,6 +3,7 @@ package auth
 import (
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
@@ -81,7 +82,17 @@ func (l *MemoryRateLimiter) removeExpired(now time.Time) {
 	}
 }
 
-func requestIP(r *http.Request) string {
+func requestIP(r *http.Request, trustProxyHeaders bool) string {
+	if trustProxyHeaders {
+		if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
+			if first, _, _ := strings.Cut(forwarded, ","); net.ParseIP(strings.TrimSpace(first)) != nil {
+				return strings.TrimSpace(first)
+			}
+		}
+		if forwarded := strings.TrimSpace(r.Header.Get("X-Real-IP")); net.ParseIP(forwarded) != nil {
+			return forwarded
+		}
+	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err == nil && host != "" {
 		return host

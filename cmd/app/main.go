@@ -150,7 +150,10 @@ func main() {
 			publicBaseURL: cfg.PublicBaseURL,
 		},
 		auth.NewMemoryRateLimiter(auth.RateLimiterConfig{}),
-		auth.HandlerConfig{RegistrationEnabled: cfg.RegistrationEnabled},
+		auth.HandlerConfig{
+			RegistrationEnabled: cfg.RegistrationEnabled,
+			TrustProxyHeaders:   cfg.TrustProxyHeaders,
+		},
 		logr,
 	)
 	csrfProtection, err := websecurity.NewCSRF(websecurity.CSRFConfig{
@@ -251,6 +254,7 @@ func buildApplicationHandler(
 		authMiddleware.LoadPrincipal(
 			csrfProtection.Protect(mux),
 		),
+		authMiddleware.SecureCookies(),
 	)
 }
 
@@ -316,6 +320,10 @@ func buildHTTPServer(cfg config.Config, handler http.Handler) *http.Server {
 		Addr:              ":" + cfg.Port,
 		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
+		MaxHeaderBytes:    1 << 20,
 	}
 }
 

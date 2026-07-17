@@ -498,6 +498,7 @@ func (h *Handler) loadSettings(ctx context.Context) (*Settings, error) {
 func (h *Handler) render(w http.ResponseWriter, r *http.Request, name string, data pageData) {
 	data.CSRFToken = websecurity.CSRFToken(r.Context())
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
 	if err := h.templates.ExecuteTemplate(w, name, data); err != nil {
 		h.logger.Error("failed to render template", "template", name, "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)

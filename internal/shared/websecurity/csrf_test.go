@@ -93,6 +93,36 @@ func TestCSRFProtectRejectsMissingOrTamperedToken(t *testing.T) {
 	}
 }
 
+func TestCSRFProtectRejectsOversizedFormBeforeHandler(t *testing.T) {
+	t.Parallel()
+
+	protection, err := NewCSRF(CSRFConfig{
+		Key:          []byte("0123456789abcdef0123456789abcdef"),
+		CookieName:   "test_csrf",
+		MaxBodyBytes: 32,
+	})
+	if err != nil {
+		t.Fatalf("NewCSRF() error = %v", err)
+	}
+	cookie, token := issueCSRFCookie(t, protection)
+	form := url.Values{
+		CSRFFieldName(): {token},
+		"payload":       {strings.Repeat("a", 128)},
+	}
+	request := httptest.NewRequest(http.MethodPost, "/submit", strings.NewReader(form.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	request.AddCookie(cookie)
+	recorder := httptest.NewRecorder()
+
+	protection.Protect(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Fatal("protected handler was called")
+	})).ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusRequestEntityTooLarge)
+	}
+}
+
 func TestNewCSRFRejectsShortSigningKey(t *testing.T) {
 	t.Parallel()
 

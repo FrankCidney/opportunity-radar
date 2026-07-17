@@ -22,17 +22,19 @@ var ErrInvalidCSRFKey = errors.New("CSRF signing key must contain at least 32 by
 type csrfContextKey struct{}
 
 type CSRFConfig struct {
-	Key        []byte
-	CookieName string
-	Secure     bool
-	MaxAge     time.Duration
+	Key          []byte
+	CookieName   string
+	Secure       bool
+	MaxAge       time.Duration
+	MaxBodyBytes int64
 }
 
 type CSRF struct {
-	key        []byte
-	cookieName string
-	secure     bool
-	maxAge     time.Duration
+	key          []byte
+	cookieName   string
+	secure       bool
+	maxAge       time.Duration
+	maxBodyBytes int64
 }
 
 func NewCSRF(config CSRFConfig) (*CSRF, error) {
@@ -45,14 +47,18 @@ func NewCSRF(config CSRFConfig) (*CSRF, error) {
 	if config.MaxAge <= 0 {
 		config.MaxAge = 12 * time.Hour
 	}
+	if config.MaxBodyBytes <= 0 {
+		config.MaxBodyBytes = 1 << 20
+	}
 
 	key := make([]byte, len(config.Key))
 	copy(key, config.Key)
 	return &CSRF{
-		key:        key,
-		cookieName: config.CookieName,
-		secure:     config.Secure,
-		maxAge:     config.MaxAge,
+		key:          key,
+		cookieName:   config.CookieName,
+		secure:       config.Secure,
+		maxAge:       config.MaxAge,
+		maxBodyBytes: config.MaxBodyBytes,
 	}, nil
 }
 
@@ -70,7 +76,13 @@ func (c *CSRF) Protect(next http.Handler) http.Handler {
 		}
 
 		if isUnsafeMethod(r.Method) {
+			r.Body = http.MaxBytesReader(w, r.Body, c.maxBodyBytes)
 			if err := r.ParseForm(); err != nil {
+				var maxBytesErr *http.MaxBytesError
+				if errors.As(err, &maxBytesErr) {
+					http.Error(w, "form submission is too large", http.StatusRequestEntityTooLarge)
+					return
+				}
 				http.Error(w, "invalid form submission", http.StatusBadRequest)
 				return
 			}

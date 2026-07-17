@@ -2,7 +2,7 @@ package websecurity
 
 import "net/http"
 
-func SecurityHeaders(next http.Handler) http.Handler {
+func SecurityHeaders(next http.Handler, hsts bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		header := w.Header()
 		header.Set("Content-Security-Policy",
@@ -15,6 +15,9 @@ func SecurityHeaders(next http.Handler) http.Handler {
 		header.Set("X-Content-Type-Options", "nosniff")
 		header.Set("X-Frame-Options", "DENY")
 		header.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+		if hsts {
+			header.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		}
 		next.ServeHTTP(w, r)
 	})
 }

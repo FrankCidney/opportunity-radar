@@ -35,6 +35,7 @@ type AccountEmailNotifier interface {
 
 type HandlerConfig struct {
 	RegistrationEnabled bool
+	TrustProxyHeaders   bool
 }
 
 type Handler struct {
@@ -75,6 +76,10 @@ func NewHandler(
 }
 
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
+	if principal, ok := PrincipalFromContext(r.Context()); ok {
+		http.Redirect(w, r, destinationForPrincipal(principal), http.StatusSeeOther)
+		return
+	}
 	if !h.config.RegistrationEnabled {
 		http.Error(w, "registration is temporarily unavailable", http.StatusServiceUnavailable)
 		return
@@ -91,7 +96,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if !h.limiter.Allow("register:ip:"+requestIP(r), h.now()) {
+	if !h.limiter.Allow("register:ip:"+requestIP(r, h.config.TrustProxyHeaders), h.now()) {
 		h.renderStatus(w, "register.html", authPageData{
 			Title:     "Create your account",
 			Email:     r.FormValue("email"),
@@ -164,7 +169,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	email := r.FormValue("email")
 	normalized, _ := normalizeEmail(email)
 	now := h.now()
-	if !h.limiter.Allow("login:ip:"+requestIP(r), now) ||
+	if !h.limiter.Allow("login:ip:"+requestIP(r, h.config.TrustProxyHeaders), now) ||
 		!h.limiter.Allow("login:email:"+normalized, now) {
 		h.renderStatus(w, "login.html", authPageData{
 			Title:     "Sign in",
@@ -305,7 +310,7 @@ func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	email := r.FormValue("email")
-	if h.limiter.Allow("reset:ip:"+requestIP(r), h.now()) {
+	if h.limiter.Allow("reset:ip:"+requestIP(r, h.config.TrustProxyHeaders), h.now()) {
 		token, _ := h.service.RequestPasswordReset(r.Context(), email)
 		if token != "" && h.notifier != nil {
 			if normalized, err := normalizeEmail(email); err == nil {
@@ -335,7 +340,7 @@ func (h *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if !h.limiter.Allow("password-reset:ip:"+requestIP(r), h.now()) {
+	if !h.limiter.Allow("password-reset:ip:"+requestIP(r, h.config.TrustProxyHeaders), h.now()) {
 		h.renderStatus(w, "reset_password.html", authPageData{
 			Title:     "Choose a new password",
 			Token:     r.FormValue("token"),

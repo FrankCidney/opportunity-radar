@@ -13,7 +13,7 @@ func TestSecurityHeadersProtectTokenBearingPages(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	SecurityHeaders(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
-	})).ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/reset-password?token=secret", nil))
+	}), true).ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/reset-password?token=secret", nil))
 
 	if got := recorder.Header().Get("Referrer-Policy"); got != "no-referrer" {
 		t.Fatalf("Referrer-Policy = %q, want no-referrer", got)
@@ -24,5 +24,8 @@ func TestSecurityHeadersProtectTokenBearingPages(t *testing.T) {
 	if csp := recorder.Header().Get("Content-Security-Policy"); !strings.Contains(csp, "form-action 'self'") ||
 		!strings.Contains(csp, "frame-ancestors 'none'") {
 		t.Fatalf("Content-Security-Policy = %q", csp)
+	}
+	if recorder.Header().Get("Strict-Transport-Security") == "" {
+		t.Fatal("production HSTS header is missing")
 	}
 }

@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"net/http/httptest"
 	"testing"
 	"time"
 )
@@ -26,6 +27,21 @@ func TestMemoryRateLimiterEnforcesWindowAndResets(t *testing.T) {
 	}
 	if !limiter.Allow("login:person", now.Add(time.Minute)) {
 		t.Fatal("attempt after window reset was rejected")
+	}
+}
+
+func TestRequestIPTrustsForwardedHeaderOnlyWhenConfigured(t *testing.T) {
+	t.Parallel()
+
+	request := httptest.NewRequest("GET", "/", nil)
+	request.RemoteAddr = "10.0.0.5:4321"
+	request.Header.Set("X-Forwarded-For", "203.0.113.10, 10.0.0.5")
+
+	if got := requestIP(request, false); got != "10.0.0.5" {
+		t.Fatalf("untrusted proxy IP = %q, want socket peer", got)
+	}
+	if got := requestIP(request, true); got != "203.0.113.10" {
+		t.Fatalf("trusted proxy IP = %q, want forwarded client", got)
 	}
 }
 

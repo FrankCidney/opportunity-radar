@@ -76,6 +76,66 @@ func TestRulesScorerRewardsFreshnessWhenOtherSignalsAreEqual(t *testing.T) {
 	}
 }
 
+func TestRulesScorerScoreIsStableSignalsPlusFreshness(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 4, 4, 12, 0, 0, 0, time.UTC)
+	profile := Profile{
+		RoleKeywords:           []string{"backend"},
+		SkillKeywords:          []string{"go"},
+		PreferredLevelKeywords: []string{"junior"},
+		PreferredLocationTerms: []string{"remote"},
+	}
+	scorer := newRulesScorerWithClock(profile, func() time.Time { return now })
+	job := &jobs.Job{
+		Title:       "Junior Backend Engineer",
+		Description: "Build services in Go.",
+		Location:    "Remote",
+		PostedAt:    now.Add(-48 * time.Hour),
+	}
+
+	withoutPostedAt := *job
+	withoutPostedAt.PostedAt = time.Time{}
+
+	stableScore := scorer.Score(&withoutPostedAt)
+	got := scorer.Score(job)
+	want := stableScore + freshnessScore(job.PostedAt, now)
+
+	if got != want {
+		t.Fatalf("Score() = %v, want stable score %v + freshness %v = %v",
+			got, stableScore, freshnessScore(job.PostedAt, now), want)
+	}
+}
+
+func TestFreshnessScoreAgeBands(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 4, 30, 12, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name     string
+		postedAt time.Time
+		want     float64
+	}{
+		{name: "missing date", postedAt: time.Time{}, want: 0},
+		{name: "future date", postedAt: now.Add(time.Minute), want: 0},
+		{name: "three days old", postedAt: now.Add(-3 * 24 * time.Hour), want: 15},
+		{name: "seven days old", postedAt: now.Add(-7 * 24 * time.Hour), want: 10},
+		{name: "fourteen days old", postedAt: now.Add(-14 * 24 * time.Hour), want: 5},
+		{name: "thirty days old", postedAt: now.Add(-30 * 24 * time.Hour), want: 2},
+		{name: "older than thirty days", postedAt: now.Add(-31 * 24 * time.Hour), want: 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := freshnessScore(tt.postedAt, now); got != tt.want {
+				t.Fatalf("freshnessScore() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestRulesScorerAppliesLocationPenalty(t *testing.T) {
 	now := time.Date(2026, 4, 4, 12, 0, 0, 0, time.UTC)
 	scorer := newRulesScorerWithClock(testProfile(), func() time.Time { return now })

@@ -57,6 +57,15 @@ func TestSendDailySendsTopJobsAndRecordsDelivery(t *testing.T) {
 	if jobLister.lastFilter.CreatedAfter == nil {
 		t.Fatal("expected CreatedAfter to be set")
 	}
+	if got, want := *jobLister.lastFilter.CreatedAfter, now.Add(-24*time.Hour); !got.Equal(want) {
+		t.Fatalf("CreatedAfter = %v, want %v", got, want)
+	}
+	if jobLister.lastFilter.Limit != 10 {
+		t.Fatalf("Limit = %d, want 10", jobLister.lastFilter.Limit)
+	}
+	if jobLister.lastFilter.Status == nil || *jobLister.lastFilter.Status != jobs.StatusActive {
+		t.Fatalf("Status = %v, want active", jobLister.lastFilter.Status)
+	}
 }
 
 func TestSendDailySkipsWhenAlreadySent(t *testing.T) {
@@ -79,6 +88,40 @@ func TestSendDailySkipsWhenAlreadySent(t *testing.T) {
 	}
 	if repo.created != nil {
 		t.Fatal("did not expect delivery to be created")
+	}
+}
+
+func TestSendDailyTreatsDeliveryConflictAfterSendAsAlreadySent(t *testing.T) {
+	t.Parallel()
+
+	repo := &stubRepository{
+		getErr:    ErrNotFound,
+		createErr: ErrConflict,
+	}
+	sender := &stubSender{}
+	service := NewService(repo, &stubJobLister{
+		jobs: []jobs.Job{{
+			ID:    1,
+			Title: "Backend Engineer",
+			URL:   "https://example.com/1",
+		}},
+	}, nil, sender, Config{
+		Enabled:   true,
+		Recipient: "me@example.com",
+	}, testLogger())
+
+	result, err := service.SendDailyResult(
+		context.Background(),
+		time.Date(2026, 4, 3, 10, 0, 0, 0, time.UTC),
+	)
+	if err != nil {
+		t.Fatalf("SendDailyResult() error = %v", err)
+	}
+	if !sender.sent {
+		t.Fatal("expected sender to be called before the delivery conflict")
+	}
+	if result.Outcome != "already_sent" {
+		t.Fatalf("outcome = %q, want %q", result.Outcome, "already_sent")
 	}
 }
 
@@ -111,14 +154,15 @@ func testLogger() *slog.Logger {
 }
 
 type stubRepository struct {
-	existing *Delivery
-	getErr   error
-	created  *Delivery
+	existing  *Delivery
+	getErr    error
+	created   *Delivery
+	createErr error
 }
 
 func (r *stubRepository) Create(_ context.Context, delivery *Delivery) error {
 	r.created = delivery
-	return nil
+	return r.createErr
 }
 
 func (r *stubRepository) GetByRecipientAndDate(_ context.Context, _ string, _ string) (*Delivery, error) {

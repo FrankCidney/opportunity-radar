@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Title}} · Opportunity Radar</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <main class="auth-shell">
+    <section class="panel auth-panel">
+      <p class="eyebrow">Workspace</p>
+      <h1>{{.TenantName}}</h1>
+      <p class="lead">Your account for <strong>{{.Email}}</strong> is verified.</p>
+      <div class="panel panel-warning auth-notice">
+        <h2>Workspace setup is being enabled</h2>
+        <p class="helper">Tenant-specific jobs and settings arrive in the next implementation phase. Existing operator data remains private and is not visible here.</p>
+      </div>
+      <form class="auth-form auth-form-compact" method="post" action="/logout">
+        <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+        <button class="button button-secondary" type="submit">Sign out</button>
+      </form>
+    </section>
+  </main>
+</body>
+</html>

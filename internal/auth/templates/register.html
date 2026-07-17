@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Title}} · Opportunity Radar</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <main class="auth-shell">
+    <section class="panel auth-panel">
+      <p class="eyebrow">Opportunity Radar</p>
+      <h1>Create your account</h1>
+      <p class="lead">Start a private workspace for the opportunities that matter to you.</p>
+      {{if .Error}}<div class="form-error" role="alert">{{.Error}}</div>{{end}}
+      <form class="auth-form" method="post" action="/register">
+        <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+        <label class="field">
+          <span>Email address</span>
+          <input type="email" name="email" value="{{.Email}}" autocomplete="email" maxlength="254" required autofocus>
+        </label>
+        <label class="field">
+          <span>Password</span>
+          <input type="password" name="password" autocomplete="new-password" minlength="12" maxlength="72" required>
+          <small>Use 12–72 characters. A password manager is recommended.</small>
+        </label>
+        <button class="button button-primary" type="submit">Create account</button>
+      </form>
+      <p class="auth-switch">Already have an account? <a class="text-link" href="/login">Sign in</a></p>
+    </section>
+  </main>
+</body>
+</html>

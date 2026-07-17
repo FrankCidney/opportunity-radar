@@ -34,6 +34,7 @@
 
     <section class="panel">
       <form class="form-grid" method="post" action="/settings/digest">
+        <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
         <label class="field field-inline">
           <input type="checkbox" name="email_updates_enabled" {{if .State.DigestEnabled}}checked{{end}}>
           <div>

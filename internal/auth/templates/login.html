@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Title}} · Opportunity Radar</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <main class="auth-shell">
+    <section class="panel auth-panel">
+      <p class="eyebrow">Opportunity Radar</p>
+      <h1>Welcome back</h1>
+      <p class="lead">Sign in to continue to your workspace.</p>
+      {{if .Flash}}<div class="flash" role="status">{{.Flash}}</div>{{end}}
+      {{if .Error}}<div class="form-error" role="alert">{{.Error}}</div>{{end}}
+      <form class="auth-form" method="post" action="/login">
+        <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+        <input type="hidden" name="next" value="{{.Next}}">
+        <label class="field">
+          <span>Email address</span>
+          <input type="email" name="email" value="{{.Email}}" autocomplete="email" maxlength="254" required autofocus>
+        </label>
+        <label class="field">
+          <span>Password</span>
+          <input type="password" name="password" autocomplete="current-password" maxlength="72" required>
+        </label>
+        <button class="button button-primary" type="submit">Sign in</button>
+      </form>
+      <div class="auth-links">
+        <a class="text-link" href="/forgot-password">Forgot password?</a>
+        <a class="text-link" href="/register">Create an account</a>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

@@ -15,6 +15,7 @@ import (
 	"opportunity-radar/internal/digest"
 	"opportunity-radar/internal/runcontrol"
 	"opportunity-radar/internal/scoring"
+	"opportunity-radar/internal/shared/websecurity"
 )
 
 //go:embed templates/*.html
@@ -110,7 +111,7 @@ func (h *Handler) Home(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.render(w, "index.html", pageData{
+	h.render(w, r, "index.html", pageData{
 		Title:                 "Opportunity Radar",
 		ActiveNav:             "home",
 		State:                 settings,
@@ -137,7 +138,7 @@ func (h *Handler) Setup(w http.ResponseWriter, r *http.Request) {
 			h.writeError(w, http.StatusInternalServerError, "failed to load settings", err)
 			return
 		}
-		h.render(w, "setup.html", pageData{
+		h.render(w, r, "setup.html", pageData{
 			Title:                 "Set Up Opportunity Radar",
 			ActiveNav:             "onboarding",
 			State:                 settings,
@@ -179,7 +180,7 @@ func (h *Handler) ProfileSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.render(w, "profile.html", pageData{
+	h.render(w, r, "profile.html", pageData{
 		Title:                 "Profile",
 		ActiveNav:             "profile",
 		State:                 settings,
@@ -228,7 +229,7 @@ func (h *Handler) ProfileEdit(w http.ResponseWriter, r *http.Request) {
 			h.writeError(w, http.StatusInternalServerError, "failed to load settings", err)
 			return
 		}
-		h.render(w, "profile_edit.html", pageData{
+		h.render(w, r, "profile_edit.html", pageData{
 			Title:                 "Edit Profile",
 			ActiveNav:             "profile",
 			State:                 settings,
@@ -262,7 +263,7 @@ func (h *Handler) DigestSettings(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, "/setup", http.StatusSeeOther)
 			return
 		}
-		h.render(w, "notifications.html", pageData{
+		h.render(w, r, "notifications.html", pageData{
 			Title:                 "Email Updates",
 			ActiveNav:             "notifications",
 			State:                 settings,
@@ -394,7 +395,7 @@ func (h *Handler) handleSetupSave(w http.ResponseWriter, r *http.Request) {
 		warnings = append(warnings, "Still required: "+strings.Join(missingRequired, ", ")+".")
 	}
 
-	h.render(w, "setup.html", pageData{
+	h.render(w, r, "setup.html", pageData{
 		Title:                 "Set Up Opportunity Radar",
 		ActiveNav:             "onboarding",
 		State:                 settings,
@@ -494,7 +495,8 @@ func (h *Handler) loadSettings(ctx context.Context) (*Settings, error) {
 	return settings, nil
 }
 
-func (h *Handler) render(w http.ResponseWriter, name string, data pageData) {
+func (h *Handler) render(w http.ResponseWriter, r *http.Request, name string, data pageData) {
+	data.CSRFToken = websecurity.CSRFToken(r.Context())
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := h.templates.ExecuteTemplate(w, name, data); err != nil {
 		h.logger.Error("failed to render template", "template", name, "error", err)
@@ -724,6 +726,7 @@ type pageData struct {
 	LocationOptions       []string
 	EmailLookbackOptions  []string
 	DigestLookbackOptions []DigestLookbackOption
+	CSRFToken             string
 }
 
 type setupReminder struct {

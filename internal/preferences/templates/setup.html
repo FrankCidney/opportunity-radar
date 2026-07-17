@@ -36,6 +36,7 @@
       </div>
 
       <form class="form-grid" method="post" action="/setup" id="setup-form">
+        <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
         <label class="field field-wide">
           <span>What roles are you looking for?</span>
           <small>Required. Example: Backend engineer, software engineer, platform engineer</small>

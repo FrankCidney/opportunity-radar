@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Title}} · Opportunity Radar</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <main class="auth-shell">
+    <section class="panel auth-panel">
+      <p class="eyebrow">Account security</p>
+      <h1>Confirm your email</h1>
+      <p class="lead">Confirm that you requested this email address for Opportunity Radar.</p>
+      {{if .Error}}<div class="form-error" role="alert">{{.Error}}</div>{{end}}
+      {{if .Token}}
+      <form class="auth-form" method="post" action="/verify-email">
+        <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+        <input type="hidden" name="token" value="{{.Token}}">
+        <button class="button button-primary" type="submit">Confirm email</button>
+      </form>
+      {{else}}
+      <p class="form-error" role="alert">This verification link is incomplete.</p>
+      {{end}}
+      <a class="text-link" href="/login">Return to sign in</a>
+    </section>
+  </main>
+</body>
+</html>

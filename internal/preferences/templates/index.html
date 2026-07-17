@@ -15,6 +15,7 @@
     </div>
     <div class="header-actions">
       <form method="post" action="/run-once">
+        <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
         <button class="button button-primary" type="submit">Run Once</button>
       </form>
     </div>

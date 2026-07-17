@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Title}} · Opportunity Radar</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <main class="auth-shell">
+    <section class="panel auth-panel">
+      <p class="eyebrow">One more step</p>
+      <h1>Verify your email</h1>
+      <p class="lead">We sent a verification link to <strong>{{.Email}}</strong>.</p>
+      <p class="helper">Verification protects your account and is required before scraping or email updates can run.</p>
+      {{if .Flash}}<div class="flash" role="status">{{.Flash}}</div>{{end}}
+      <form class="auth-form" method="post" action="/verify-email/resend">
+        <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+        <button class="button button-secondary" type="submit">Send another email</button>
+      </form>
+      <form class="auth-form auth-form-compact" method="post" action="/logout">
+        <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+        <button class="button button-secondary" type="submit">Sign out</button>
+      </form>
+    </section>
+  </main>
+</body>
+</html>

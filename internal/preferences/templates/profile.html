@@ -56,6 +56,7 @@
         <div class="section-actions">
           {{if or (not .State.SetupComplete) .SetupReminder}}<a class="button button-secondary" href="/setup">Finish onboarding</a>{{end}}
           <form method="post" action="/settings/profile/reset">
+            <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
             <button class="button button-danger" type="submit">Clear profile</button>
           </form>
         </div>

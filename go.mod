@@ -4,6 +4,8 @@ go 1.25.0
 
 require (
 	github.com/lib/pq v1.10.9
+	golang.org/x/crypto v0.49.0
+	golang.org/x/net v0.52.0
 	jaytaylor.com/html2text v0.0.0-20260303211410-1a4bdc82ecec
 )
 
@@ -20,6 +22,5 @@ require (
 	github.com/olekukonko/ll v0.1.6 // indirect
 	github.com/olekukonko/tablewriter v1.1.4 // indirect
 	github.com/ssor/bom v0.0.0-20170718123548-6386211fdfcf // indirect
-	golang.org/x/net v0.52.0 // indirect
 	golang.org/x/sys v0.42.0 // indirect
 )

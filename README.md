@@ -2,7 +2,21 @@
 
 Opportunity Radar is a self-hosted Go app that collects jobs, scores them against your preferences, stores them in PostgreSQL, and sends digest emails when configured.
 
-For technical architecture, design constraints, and future-direction notes, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+## Documentation
+
+- [Architecture](docs/ARCHITECTURE.md) — implemented structure and technical
+  reasoning.
+- [Security](SECURITY.md) — current security posture, deployment expectations, and
+  vulnerability reporting.
+- [Operations](docs/OPERATIONS.md) — runtime, migrations, recovery, and production
+  operations.
+- [Data model](docs/DATA_MODEL.md) — current records, relationships, and lifecycle.
+- [User guide](docs/USER_GUIDE.md) — setup and day-to-day workflows.
+- [Architecture decisions](docs/adr/README.md) — durable records of consequential
+  technical decisions.
+
+Temporary implementation plans and engineering notes live under `docs/dev/` and
+must not be treated as descriptions of already implemented behavior.
 
 ## The Idea
 

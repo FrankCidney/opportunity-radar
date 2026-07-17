@@ -118,6 +118,9 @@ Important packages today:
 - `internal/scrapers/brightermonday`
   BrighterMonday scraper
 
+- `internal/scrapers/fuzu`
+  Fuzu scraper
+
 - `internal/scoring`
   Rule-based scoring logic
 
@@ -150,9 +153,10 @@ This layering matters because scraper behavior is inherently unstable. By contai
 
 ## Scraping Strategy
 
-The app currently has two sources:
+The app currently has three sources:
 - Remotive
 - BrighterMonday
+- Fuzu
 
 ### Remotive
 
@@ -175,6 +179,20 @@ The scraper is intentionally conservative:
 - no high-concurrency crawling
 - small delay between requests
 - source-specific parsing stays local to the scraper package
+
+### Fuzu
+
+Fuzu uses a two-step listing and detail-page scrape. It prefers structured JSON-LD
+data and falls back to HTML parsing where appropriate.
+
+Its scraper is bounded by:
+
+- a fixed maximum number of listing pages
+- sequential detail-page requests
+- a delay between requests
+- HTTP client timeouts
+
+Fuzu currently targets its configured Kenya software-development listing path.
 
 ## Normalization And Why It Exists
 
@@ -299,7 +317,7 @@ This is expected. Scrapers are adapters over systems we do not control.
 
 ### Source coverage is still small
 
-Only two job sources currently exist.
+Only three job sources currently exist.
 
 That means:
 - job coverage is still limited

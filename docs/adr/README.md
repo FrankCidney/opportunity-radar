@@ -6,10 +6,10 @@ decisions, including the context, alternatives, tradeoffs, and consequences.
 `docs/ARCHITECTURE.md` describes the architecture that currently exists. ADRs explain
 why a particular durable decision was made.
 
-## Status
+## Records
 
-No standalone ADRs have been recorded yet. Existing historical reasoning remains in
-`docs/ARCHITECTURE.md`.
+- [ADR-0001: Separate users from tenants](0001-separate-users-from-tenants.md)
+- [ADR-0002: Use opaque database-backed sessions](0002-opaque-database-backed-sessions.md)
 
 Create ADRs as consequential decisions become implemented. Planned decisions may be
 drafted, but they must be clearly marked `Proposed` and must not be described as

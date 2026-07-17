@@ -2,10 +2,41 @@
 
 ## Status
 
-This guide describes the current self-hosted, single-user application. Registration,
-login, organizations/workspaces, and personal schedules are not implemented yet.
+This guide describes the transitional application. Registration, login, email
+verification, password recovery, and personal workspace identity are implemented.
+Tenant-specific jobs, preferences, schedules, and digests are not yet available to
+new workspaces.
 
-## First-Time Setup
+## Accounts
+
+### Register
+
+1. Open `/register`.
+2. Enter a valid email address.
+3. Choose a password between 12 and 72 characters.
+4. Submit the form.
+5. Follow the verification link sent by email.
+
+Verification is required before scraping or email delivery can run.
+
+### Sign in and out
+
+Use `/login` with the normalized account email and password. Sign out through the
+provided POST form; logout invalidates the database session and clears the cookie.
+
+### Password recovery
+
+Use **Forgot password?** on the login page. The confirmation is deliberately the
+same whether or not an account exists. A successful password reset invalidates all
+existing sessions.
+
+### New workspace holding page
+
+Newly registered users receive a personal workspace. Until Phase 2 tenant-scopes the
+domain records, verified new users see a holding page rather than the existing
+operator's jobs or settings.
+
+## Legacy Workspace Setup
 
 1. Deploy and open Opportunity Radar using the instructions in `README.md`.
 2. Complete the setup form.
@@ -105,9 +136,6 @@ changed its response/page structure. Review source-specific logs.
 
 The following are planned but unavailable:
 
-- open registration and login;
-- email verification and password reset;
-- isolated workspaces/tenants;
 - user-controlled sources and scraping schedules;
 - durable Run Once status;
 - tenant-specific jobs, companies, scores, and digests.

@@ -8,20 +8,26 @@ It is intentionally different from the main README:
 
 ## Product Model
 
-`opportunity-radar` is currently designed as a self-hosted, single-user application.
+`opportunity-radar` is transitioning from a self-hosted, single-user application to
+a multi-user application.
 
-That means:
-- one deployed app instance is expected to serve one operator
-- one PostgreSQL database belongs to that one operator
-- deployment configuration is environment-driven
-- operator preferences are persisted in the app database
-- there is no account system, tenancy model, or shared hosted control plane
+The implemented identity foundation now has:
 
-This constraint simplifies the system a lot:
-- the scheduler can be process-local
-- settings do not need per-user isolation logic
-- auth and permissions are deferred
-- deployment can stay practical and lightweight
+- open account registration;
+- email/password login;
+- email verification and password recovery;
+- database-backed opaque sessions;
+- users, tenants/workspaces, and memberships;
+- an explicitly claimed legacy workspace for existing operator data.
+
+The domain-data migration is not complete. Companies, jobs, preferences, and digest
+deliveries still use their single-operator schema. To prevent cross-account data
+exposure during this transition:
+
+- only the verified owner of the legacy workspace may enter the current console;
+- new personal workspaces receive a holding page;
+- manual and automatic legacy runs require a verified legacy owner;
+- public registration never claims existing operator data.
 
 ## Why A Single Go Service
 
@@ -31,6 +37,7 @@ The app is one Go process that owns:
 - digest generation and delivery
 - source scraping
 - normalization and scoring
+- authentication, session verification, and account recovery
 
 This choice was made for simplicity and operability:
 - fewer moving parts
@@ -65,12 +72,14 @@ At startup, the app currently:
 1. loads environment-based runtime config
 2. opens a PostgreSQL connection
 3. applies pending SQL migrations
-4. loads or bootstraps persisted app settings
-5. builds the scoring profile from settings
-6. wires the scraper and ingest pipeline
-7. starts the HTTP admin UI
-8. runs ingest immediately if scheduler config says to do so
-9. continues on the configured schedule
+4. optionally claims an existing legacy workspace from protected bootstrap
+   configuration;
+5. loads or bootstraps persisted app settings;
+6. builds the scoring profile from settings;
+7. wires authentication, CSRF protection, and the scraper/ingest pipeline;
+8. starts the HTTP application;
+9. runs legacy ingest only if setup, scheduler, and verified-owner gates allow it;
+10. continues on the configured schedule.
 
 The scheduler, digest, and UI all run inside the same application process.
 
@@ -105,6 +114,13 @@ Important packages today:
 
 - `internal/shared/migrator`
   Startup migration runner that applies SQL migrations automatically
+
+- `internal/shared/websecurity`
+  Signed CSRF protection and browser security headers
+
+- `internal/auth`
+  Users, tenants, memberships, password hashing, sessions, account tokens,
+  authentication middleware, and account HTTP flows
 
 - `internal/ingest`
   Pipeline orchestration and scraper interfaces
@@ -328,21 +344,24 @@ That means:
 
 The scheduler lives inside the app process.
 
-That is fine for the current single-user deployment model, but it means:
+That remains acceptable for the transitional single-replica deployment, but it
+means:
 - missed uptime means missed runs
 - the app is not using an external durable job queue
 - long-running or blocked downstream calls can affect run timing
 
-### No multi-user support
+### Partial multi-user support
 
-The app is not designed for multiple users today.
+Identity and authentication are implemented, but tenant-aware domain persistence is
+not complete.
 
-Missing pieces include:
-- authentication
-- user identity
-- tenant-aware settings and jobs
-- per-user digests
-- authorization boundaries
+Still missing:
+
+- tenant-aware preferences, jobs, and companies;
+- durable tenant scrape schedules and runs;
+- tenant-specific rescoring and digests;
+- general workspace access to the main console;
+- team invitation and workspace-switching features.
 
 ### No retroactive rescoring
 
@@ -418,16 +437,13 @@ Reasonable future directions include:
 - supporting more deployment targets
   Still self-hosted, but easier across different providers
 
-- exploring multi-user support later
-  Only if the product direction changes enough to justify the added complexity
-
 ## Non-Goals For Now
 
 Things intentionally not optimized right now:
 
 - high-scale scraping
 - generic scraping infrastructure for every possible source
-- public multi-tenant SaaS
+- multi-replica or high-scale SaaS infrastructure
 - distributed workers
 - heavy frontend architecture
 - machine-learning-first ranking

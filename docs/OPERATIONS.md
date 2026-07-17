@@ -2,9 +2,10 @@
 
 ## Status
 
-This runbook describes the application as it operates today. Opportunity Radar is
-currently one Go service, one PostgreSQL database, and one process-local scheduler.
-Multi-user background queues and workers are planned but not implemented.
+This runbook describes the application as it operates today. Opportunity Radar uses
+one Go service, one PostgreSQL database, database-backed authentication, and one
+process-local scheduler. Multi-user background queues and workers are not yet
+implemented.
 
 ## Deployment Topology
 
@@ -53,6 +54,23 @@ Optional email delivery:
 - `RESEND_API_KEY`
 - `RESEND_FROM_EMAIL`
 - `RESEND_FROM_NAME`
+- `REGISTRATION_ENABLED`
+- `TRUST_PROXY_HEADERS`
+- `PUBLIC_BASE_URL`
+- `AUTH_CSRF_KEY`
+- `AUTH_SESSION_TTL`
+- `AUTH_VERIFICATION_TTL`
+- `AUTH_PASSWORD_RESET_TTL`
+
+Existing deployments may temporarily set both:
+
+- `BOOTSTRAP_ADMIN_EMAIL`
+- `BOOTSTRAP_ADMIN_PASSWORD`
+
+Leave `TRUST_PROXY_HEADERS=false` unless direct application traffic is restricted to
+a trusted reverse proxy that controls `X-Forwarded-For`/`X-Real-IP`. Railway
+deployments should enable it so rate limits use the real client address rather than
+one shared proxy address.
 
 Digest recipient, lookback, and top-N are persisted through the application UI.
 
@@ -63,14 +81,38 @@ On startup the application:
 1. loads environment configuration;
 2. connects to PostgreSQL;
 3. discovers and applies pending migrations;
-4. loads or creates the single settings record;
-5. constructs the scorer and ingest pipeline;
-6. starts the HTTP server;
-7. optionally runs ingestion on startup;
-8. starts the process-local schedule.
+4. creates or verifies authentication services;
+5. optionally claims an unclaimed legacy workspace;
+6. loads or creates the single legacy settings record;
+7. constructs the scorer and ingest pipeline;
+8. starts the HTTP server with authentication, CSRF, and security headers;
+9. optionally runs ingestion when setup and verified legacy ownership allow it;
+10. starts the process-local schedule.
 
 A database or migration failure prevents a healthy startup. Do not bypass migration
 errors by manually marking a migration applied unless the schema has been verified.
+
+## Existing Deployment Bootstrap
+
+The identity migration creates an unclaimed legacy workspace only when existing
+settings, companies, jobs, or digest records are present. It does not create a user
+or default password.
+
+To claim it:
+
+1. choose the existing operator's email and a unique password of 12–72 characters;
+2. set `BOOTSTRAP_ADMIN_EMAIL` and `BOOTSTRAP_ADMIN_PASSWORD` through protected
+   deployment secrets;
+3. deploy once;
+4. confirm the log records creation of the legacy owner without printing the
+   password;
+5. remove both bootstrap variables immediately;
+6. sign in with the bootstrap account.
+
+The bootstrap account is marked verified because possession of deployment secrets
+is the ownership proof. Bootstrap fails rather than attaching legacy data to an
+already registered public account. The first public registrant can never claim the
+legacy workspace.
 
 ## Migrations
 
@@ -209,7 +251,7 @@ The following production capabilities do not exist yet:
 - multi-replica coordination;
 - dedicated health endpoints;
 - metrics, tracing, and alerting;
-- automated session/token cleanup;
+- automated expired session/token cleanup;
 - run-history retention policies;
 - documented disaster-recovery objectives.
 

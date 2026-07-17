@@ -2,16 +2,14 @@
 
 ## Current Status
 
-Opportunity Radar is currently a self-hosted, single-user application. It does not
-yet implement accounts, authentication, authorization, tenant isolation, or
-internet-facing abuse controls.
+Opportunity Radar implements the Phase 1 account-security foundation: registration,
+password hashing, email verification, password recovery, database-backed sessions,
+membership-derived workspace identity, CSRF protection, browser security headers,
+and basic in-process abuse controls.
 
-Until those controls are implemented, do not expose the current application directly
-to untrusted users or the public internet. Restrict access at the network, hosting,
-VPN, or reverse-proxy layer.
-
-The planned multi-user security model is documented under `docs/dev/`, but planned
-controls must not be assumed to exist.
+Tenant isolation for jobs, companies, preferences, and digests is not complete.
+During this transition, only the explicitly bootstrapped legacy owner may access the
+existing console. Newly registered workspaces cannot access legacy domain data.
 
 ## Reporting a Vulnerability
 
@@ -40,6 +38,18 @@ Include:
 - SQL migrations execute automatically at application startup.
 - External scraper and email requests use application-controlled clients.
 - The server-rendered admin UI currently assumes one trusted operator.
+- Authentication uses opaque, high-entropy cookie tokens. Only SHA-256 token hashes
+  are stored.
+- Passwords use bcrypt with cost 12 and are never placed in authenticated request
+  principals.
+- Verification and reset tokens are single-use, hashed, and expiring.
+- Password reset revokes all existing sessions.
+- State-changing forms use signed double-submit CSRF tokens.
+- Cookies are `HttpOnly`, `SameSite=Lax`, and `Secure` in production.
+- Token-bearing pages use `Referrer-Policy: no-referrer`.
+- Production responses enable HSTS, and form bodies are bounded before parsing.
+- Login, registration, verification resend, reset request, and reset submission are
+  rate-limited in the single application process.
 
 ## Secrets
 
@@ -55,7 +65,7 @@ Compose environment. Do not reuse it for a publicly reachable database.
 
 ## Production Deployment Baseline
 
-For the current single-user version:
+For the current transitional version:
 
 - terminate HTTPS before traffic reaches the application;
 - restrict application access to the intended operator;
@@ -67,25 +77,20 @@ For the current single-user version:
 - review logs for scraper, database, migration, and email failures;
 - deploy only reviewed commits with passing tests.
 
-## Multi-User Security Work
+## Remaining Multi-User Security Work
 
-Authentication and tenant security are not implemented yet. Before real multi-user
-use, the application must add and verify:
+Before all registered workspaces can use domain features, the application must add
+and verify:
 
-- password hashing;
-- hashed, expiring sessions and one-time tokens;
-- secure cookie attributes;
-- CSRF protection;
-- normalized account identity;
-- email verification and password reset;
-- login, registration, and expensive-action rate limits;
 - repository-level tenant filtering;
 - database-enforced same-tenant relationships;
 - negative cross-tenant integration tests;
-- safe ownership of legacy data.
+- tenant-safe background work and digests;
+- shared rate limiting before running multiple application replicas;
+- automated cleanup/retention for expired sessions and account tokens.
 
-This section should be replaced with the implemented controls as Phase 1 and later
-phases land.
+Legacy ownership is safe only through the protected one-time startup bootstrap. The
+first public registrant never receives legacy data.
 
 ## Data and Privacy
 

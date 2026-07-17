@@ -1,6 +1,13 @@
 # Opportunity Radar
 
-Opportunity Radar is a self-hosted Go app that collects jobs, scores them against your preferences, stores them in PostgreSQL, and sends digest emails when configured.
+Opportunity Radar is a Go application that collects jobs, scores them against saved
+preferences, stores them in PostgreSQL, and sends digest emails when configured.
+
+The multi-user transition is in progress. Account registration, login, email
+verification, password recovery, and isolated workspace identities are implemented.
+Jobs, companies, and preferences remain on the legacy single-operator model until
+the next migration phase, so newly registered workspaces currently show a safe
+holding page instead of existing operator data.
 
 ## Documentation
 
@@ -30,13 +37,9 @@ From a user's perspective, the app is meant to work like this:
 
 If you want to see it work immediately instead of waiting for the next scheduled run, you can use `Run Once` in the UI after setup.
 
-This repo is designed for single-user deployment:
-- one app instance
-- one database
-- one operator
-- self-hosted on your own machine or your own cloud account
-
-There is no shared central server, no multi-user account system, and no SaaS control plane.
+The current deployment still runs one application replica and one PostgreSQL
+database. Existing single-user deployments must claim their legacy workspace using
+the one-time bootstrap procedure in `docs/OPERATIONS.md`.
 
 ## Getting Started
 
@@ -90,6 +93,8 @@ These are the supported runtime variables:
 - `RESEND_FROM_EMAIL` (optional)
 - `RESEND_FROM_NAME` (optional, default `Opportunity Radar`)
 - `REGISTRATION_ENABLED` (optional, default `true`)
+- `TRUST_PROXY_HEADERS` (optional, default `false`; enable only behind a trusted
+  reverse proxy that controls forwarded client-IP headers)
 - `PUBLIC_BASE_URL` (required in production, HTTPS)
 - `AUTH_CSRF_KEY` (required in production, at least 32 bytes)
 - `AUTH_SESSION_TTL` (optional, default `720h`)
@@ -98,8 +103,8 @@ These are the supported runtime variables:
 - `BOOTSTRAP_ADMIN_EMAIL` and `BOOTSTRAP_ADMIN_PASSWORD` (one-time migration of an
   existing single-user deployment only)
 
-When registration is enabled in production, `RESEND_API_KEY` and
-`RESEND_FROM_EMAIL` are required so users can verify and recover their accounts.
+In production, `RESEND_API_KEY` and `RESEND_FROM_EMAIL` are required so users can
+verify and recover their accounts.
 Generate a unique CSRF key through a secure secret generator, for example:
 
 ```bash
@@ -264,6 +269,7 @@ Add these variables in the app service `Variables` tab:
 - `RESEND_FROM_EMAIL=you@example.com`
 - `RESEND_FROM_NAME=Opportunity Radar`
 - `REGISTRATION_ENABLED=true`
+- `TRUST_PROXY_HEADERS=true`
 - `PUBLIC_BASE_URL=https://<your-app-domain>`
 - `AUTH_CSRF_KEY=<a-unique-secret-of-at-least-32-bytes>`
 

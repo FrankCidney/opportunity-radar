@@ -2,8 +2,9 @@
 
 ## Status
 
-This document describes the current single-user PostgreSQL model. The planned
-multi-user tenant model is not implemented yet.
+This document describes the current transitional PostgreSQL model. Identity and
+authentication tables exist, while jobs, companies, settings, and digests remain on
+the legacy single-operator schema until Phase 2.
 
 The schema is defined by ordered SQL files in `migrations/`. Explicit SQL
 repositories in `internal/` read and write the records.
@@ -11,7 +12,12 @@ repositories in `internal/` read and write the records.
 ## Current Relationships
 
 ```text
-app_settings (one row)
+users
+    ├── sessions
+    ├── account_tokens
+    └── tenant_memberships ── tenants
+
+app_settings (one legacy row)
 
 companies
     └── jobs
@@ -19,8 +25,39 @@ companies
 digest_deliveries
 ```
 
-There are currently no users, tenants, memberships, sessions, account tokens,
-scrape-run records, or rescore-run records.
+There are currently no durable scrape-run or rescore-run records.
+
+## Users, Tenants, and Memberships
+
+`users` stores normalized unique email identity, a bcrypt password hash, verification
+state, disabled state, and timestamps.
+
+`tenants` is the workspace ownership boundary. Normal registration creates one user,
+one non-legacy tenant, and one owner membership transactionally.
+
+`tenant_memberships` connects users to tenants with an `owner` or `member` role.
+Team-management behavior is not implemented yet.
+
+An existing deployment may have one `is_legacy = TRUE` tenant. Its ownership is
+created only through protected bootstrap configuration.
+
+## Sessions and Account Tokens
+
+`sessions` stores:
+
+- user identity;
+- a unique 32-byte SHA-256 token hash;
+- expiry and activity timestamps.
+
+The usable opaque token exists only in the browser cookie.
+
+`account_tokens` stores hashed, expiring, single-use tokens for:
+
+- `verify_email`;
+- `reset_password`.
+
+Password reset consumes its token, updates the password hash, and deletes all
+sessions in one transaction.
 
 ## Companies
 
@@ -98,8 +135,9 @@ must resolve this risk before public multi-user operation.
 
 ## Ownership and Isolation
 
-All current domain data belongs implicitly to the single operator of the deployed
-instance. There is no row-level ownership or authorization boundary.
+All current job/company/settings/digest data still belongs implicitly to the legacy
+operator. Only the verified legacy membership can reach it through HTTP, but the
+rows do not yet contain `tenant_id`.
 
 Before multi-user operation, tenant-owned tables must gain non-null tenant identity,
 tenant-scoped repository methods and indexes, and database-enforced same-tenant
@@ -116,7 +154,8 @@ Current behavior:
 - digest delivery records persist without an automated retention policy.
 
 There is no account deletion, tenant deletion, user-data export, or formal retention
-policy because accounts and tenants do not exist yet.
+policy yet. Expired session and account-token rows are rejected by queries but do
+not yet have an automated cleanup task.
 
 ## Future Documentation Work
 

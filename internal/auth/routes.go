@@ -2,9 +2,7 @@ package auth
 
 import "net/http"
 
-func Routes(handler *Handler, middleware *Middleware) http.Handler {
-	mux := http.NewServeMux()
-
+func RegisterRoutes(mux *http.ServeMux, handler *Handler, middleware *Middleware) {
 	mux.HandleFunc("/register", handler.Register)
 	mux.HandleFunc("/login", handler.Login)
 	mux.HandleFunc("/verify-email", handler.VerifyEmail)
@@ -24,6 +22,4 @@ func Routes(handler *Handler, middleware *Middleware) http.Handler {
 		"/account/pending",
 		middleware.RequireVerified(http.HandlerFunc(handler.AccountPending)),
 	)
-
-	return mux
 }

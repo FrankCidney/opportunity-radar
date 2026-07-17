@@ -89,6 +89,22 @@ These are the supported runtime variables:
 - `RESEND_API_KEY` (optional)
 - `RESEND_FROM_EMAIL` (optional)
 - `RESEND_FROM_NAME` (optional, default `Opportunity Radar`)
+- `REGISTRATION_ENABLED` (optional, default `true`)
+- `PUBLIC_BASE_URL` (required in production, HTTPS)
+- `AUTH_CSRF_KEY` (required in production, at least 32 bytes)
+- `AUTH_SESSION_TTL` (optional, default `720h`)
+- `AUTH_VERIFICATION_TTL` (optional, default `24h`)
+- `AUTH_PASSWORD_RESET_TTL` (optional, default `1h`)
+- `BOOTSTRAP_ADMIN_EMAIL` and `BOOTSTRAP_ADMIN_PASSWORD` (one-time migration of an
+  existing single-user deployment only)
+
+When registration is enabled in production, `RESEND_API_KEY` and
+`RESEND_FROM_EMAIL` are required so users can verify and recover their accounts.
+Generate a unique CSRF key through a secure secret generator, for example:
+
+```bash
+openssl rand -base64 32
+```
 
 ## Local Docker Deployment
 
@@ -247,6 +263,9 @@ Add these variables in the app service `Variables` tab:
 - `RESEND_API_KEY=...`
 - `RESEND_FROM_EMAIL=you@example.com`
 - `RESEND_FROM_NAME=Opportunity Radar`
+- `REGISTRATION_ENABLED=true`
+- `PUBLIC_BASE_URL=https://<your-app-domain>`
+- `AUTH_CSRF_KEY=<a-unique-secret-of-at-least-32-bytes>`
 
 `DATABASE_URL=${{Postgres.DATABASE_URL}}` tells Railway to inject the database URL from the PostgreSQL service into the app service.
 

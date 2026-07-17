@@ -3,13 +3,16 @@ package main
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
+	"opportunity-radar/internal/auth"
 	"opportunity-radar/internal/companies"
 	"opportunity-radar/internal/digest"
 	"opportunity-radar/internal/ingest"
@@ -24,6 +27,7 @@ import (
 	"opportunity-radar/internal/shared/config"
 	"opportunity-radar/internal/shared/logger"
 	"opportunity-radar/internal/shared/migrator"
+	"opportunity-radar/internal/shared/websecurity"
 )
 
 func main() {
@@ -60,6 +64,23 @@ func main() {
 
 	if err := migrator.Run(ctx, sqlDB, logr); err != nil {
 		logr.Error("failed to run database migrations", "error", err)
+		os.Exit(1)
+	}
+
+	authRepo := auth.NewPostgresRepository(sqlDB, logr)
+	authService := auth.NewService(
+		authRepo,
+		nil,
+		nil,
+		auth.ServiceConfig{
+			SessionTTL:       cfg.AuthSessionTTL,
+			VerificationTTL:  cfg.AuthVerificationTTL,
+			PasswordResetTTL: cfg.AuthPasswordResetTTL,
+		},
+		logr,
+	)
+	if err := bootstrapLegacyOwner(ctx, cfg, authService, logr); err != nil {
+		logr.Error("failed to bootstrap legacy workspace owner", "error", err)
 		os.Exit(1)
 	}
 
@@ -102,7 +123,11 @@ func main() {
 		toDigestConfig(settings),
 		logr,
 	)
-	digestRunner := digest.NewRunner(ingestService, preferencesService, digestService, logr)
+	runEligibility := combinedRunEligibility{
+		setup:  preferencesService,
+		legacy: authService,
+	}
+	digestRunner := digest.NewRunner(ingestService, runEligibility, digestService, logr)
 	runCoordinator := runcontrol.New(digestRunner, logr)
 	adminHandler := preferences.NewHandler(
 		preferencesService,
@@ -114,7 +139,35 @@ func main() {
 		scheduleLabel(cfg),
 		logr,
 	)
-	server := buildHTTPServer(cfg, preferences.Routes(adminHandler))
+	authMiddleware := auth.NewMiddleware(authService, auth.MiddlewareConfig{
+		Secure: strings.EqualFold(cfg.Env, "production"),
+	})
+	authHandler := auth.NewHandler(
+		authService,
+		authMiddleware,
+		accountEmailNotifier{
+			sender:        digestSender,
+			publicBaseURL: cfg.PublicBaseURL,
+		},
+		auth.NewMemoryRateLimiter(auth.RateLimiterConfig{}),
+		auth.HandlerConfig{RegistrationEnabled: cfg.RegistrationEnabled},
+		logr,
+	)
+	csrfProtection, err := websecurity.NewCSRF(websecurity.CSRFConfig{
+		Key:    []byte(cfg.AuthCSRFKey),
+		Secure: strings.EqualFold(cfg.Env, "production"),
+	})
+	if err != nil {
+		logr.Error("failed to configure CSRF protection", "error", err)
+		os.Exit(1)
+	}
+	handler := buildApplicationHandler(
+		adminHandler,
+		authHandler,
+		authMiddleware,
+		csrfProtection,
+	)
+	server := buildHTTPServer(cfg, handler)
 
 	serverErrCh := make(chan error, 1)
 	go func() {
@@ -173,6 +226,70 @@ func main() {
 			os.Exit(1)
 		}
 	}
+}
+
+func buildApplicationHandler(
+	adminHandler *preferences.Handler,
+	authHandler *auth.Handler,
+	authMiddleware *auth.Middleware,
+	csrfProtection *websecurity.CSRF,
+) http.Handler {
+	mux := http.NewServeMux()
+	auth.RegisterRoutes(mux, authHandler, authMiddleware)
+	mux.Handle("/static/", http.HandlerFunc(adminHandler.Static))
+
+	legacyConsole := authMiddleware.RequireAuth(
+		authMiddleware.RequireVerified(
+			authMiddleware.RequireLegacyTenant(
+				preferences.Routes(adminHandler),
+			),
+		),
+	)
+	mux.Handle("/", legacyConsole)
+
+	return websecurity.SecurityHeaders(
+		authMiddleware.LoadPrincipal(
+			csrfProtection.Protect(mux),
+		),
+	)
+}
+
+func bootstrapLegacyOwner(
+	ctx context.Context,
+	cfg config.Config,
+	service *auth.Service,
+	logger *slog.Logger,
+) error {
+	needsClaim, err := service.LegacyTenantNeedsClaim(ctx)
+	if err != nil {
+		return err
+	}
+	if !needsClaim {
+		return nil
+	}
+	if cfg.BootstrapAdminEmail == "" || cfg.BootstrapAdminPassword == "" {
+		logger.Warn("legacy workspace is unclaimed; existing operator data and automatic runs remain locked",
+			"action", "set BOOTSTRAP_ADMIN_EMAIL and BOOTSTRAP_ADMIN_PASSWORD, deploy once, then remove both",
+		)
+		return nil
+	}
+
+	principal, err := service.BootstrapLegacyOwner(
+		ctx,
+		cfg.BootstrapAdminEmail,
+		cfg.BootstrapAdminPassword,
+	)
+	if err != nil {
+		if errors.Is(err, auth.ErrLegacyAlreadyClaimed) {
+			return nil
+		}
+		return err
+	}
+	logger.Info("legacy workspace owner created; remove bootstrap credentials before the next deployment",
+		"user_id", principal.User.ID,
+		"tenant_id", principal.Tenant.ID,
+	)
+	return nil
 }
 
 func buildDigestSender(cfg config.Config, logger *slog.Logger) digest.Sender {

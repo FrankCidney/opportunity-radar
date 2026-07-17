@@ -42,6 +42,14 @@ type Repository interface {
 		passwordHash string,
 		now time.Time,
 	) error
+	LegacyTenantNeedsClaim(ctx context.Context) (bool, error)
+	LegacyTenantReady(ctx context.Context) (bool, error)
+	ClaimLegacyTenant(
+		ctx context.Context,
+		email string,
+		passwordHash string,
+		verifiedAt time.Time,
+	) (*Principal, error)
 }
 
 type Registration struct {

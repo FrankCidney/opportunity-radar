@@ -335,6 +335,15 @@ func (h *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	if !h.limiter.Allow("password-reset:ip:"+requestIP(r), h.now()) {
+		h.renderStatus(w, "reset_password.html", authPageData{
+			Title:     "Choose a new password",
+			Token:     r.FormValue("token"),
+			Error:     "Too many reset attempts. Please wait and request a new link if needed.",
+			CSRFToken: websecurity.CSRFToken(r.Context()),
+		}, http.StatusTooManyRequests)
+		return
+	}
 	err := h.service.ResetPassword(
 		r.Context(),
 		r.FormValue("token"),

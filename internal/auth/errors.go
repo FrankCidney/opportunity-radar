@@ -11,6 +11,7 @@ var (
 	ErrAccountDisabled      = errors.New("account is disabled")
 	ErrEmailAlreadyVerified = errors.New("email address is already verified")
 	ErrInvalidToken         = errors.New("token is invalid or expired")
+	ErrLegacyAlreadyClaimed = errors.New("legacy workspace already has an owner")
 	ErrNotFound             = errors.New("record not found")
 	ErrConflict             = errors.New("record conflict")
 	ErrInternal             = errors.New("authentication service unavailable")

@@ -318,6 +318,61 @@ func (s *Service) ResetPassword(
 	return nil
 }
 
+func (s *Service) LegacyTenantNeedsClaim(ctx context.Context) (bool, error) {
+	needsClaim, err := s.repo.LegacyTenantNeedsClaim(ctx)
+	if err != nil {
+		s.logger.Error("failed to inspect legacy workspace claim state", "error", err)
+		return false, ErrInternal
+	}
+	return needsClaim, nil
+}
+
+func (s *Service) LegacyTenantReady(ctx context.Context) (bool, error) {
+	ready, err := s.repo.LegacyTenantReady(ctx)
+	if err != nil {
+		s.logger.Error("failed to inspect legacy workspace readiness", "error", err)
+		return false, ErrInternal
+	}
+	return ready, nil
+}
+
+func (s *Service) BootstrapLegacyOwner(
+	ctx context.Context,
+	email string,
+	password string,
+) (*Principal, error) {
+	normalizedEmail, err := normalizeEmail(email)
+	if err != nil {
+		return nil, err
+	}
+	if err := validatePassword(password); err != nil {
+		return nil, err
+	}
+	passwordHash, err := s.hasher.Hash(password)
+	if err != nil {
+		s.logger.Error("failed to hash legacy bootstrap password", "error", err)
+		return nil, ErrInternal
+	}
+	principal, err := s.repo.ClaimLegacyTenant(
+		ctx,
+		normalizedEmail,
+		passwordHash,
+		s.now().UTC(),
+	)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrNotFound), errors.Is(err, ErrLegacyAlreadyClaimed):
+			return nil, err
+		case errors.Is(err, ErrConflict):
+			return nil, ErrEmailAlreadyExists
+		default:
+			s.logger.Error("failed to claim legacy workspace", "error", err)
+			return nil, ErrInternal
+		}
+	}
+	return principal, nil
+}
+
 func (s *Service) createAccountToken(
 	ctx context.Context,
 	userID int64,

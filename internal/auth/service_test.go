@@ -385,6 +385,43 @@ func TestSecureTokenGeneratorProducesOpaqueHashedTokens(t *testing.T) {
 	}
 }
 
+func TestBootstrapLegacyOwnerCreatesVerifiedOwnerWithoutPlaintextPassword(t *testing.T) {
+	t.Parallel()
+
+	principal := testPrincipal("owner@example.com")
+	verifiedAt := time.Now()
+	principal.User.EmailVerifiedAt = &verifiedAt
+	principal.Tenant.IsLegacy = true
+	repo := &stubRepository{legacyPrincipal: &principal}
+	service := testService(
+		repo,
+		&stubPasswordHasher{hash: "bootstrap-password-hash"},
+		&sequenceTokenGenerator{},
+		time.Date(2026, 7, 18, 12, 0, 0, 0, time.UTC),
+	)
+
+	got, err := service.BootstrapLegacyOwner(
+		context.Background(),
+		" Owner@Example.com ",
+		"correct horse battery staple",
+	)
+	if err != nil {
+		t.Fatalf("BootstrapLegacyOwner() error = %v", err)
+	}
+	if !got.Tenant.IsLegacy {
+		t.Fatal("bootstrap did not return legacy tenant")
+	}
+	if repo.legacyEmail != "owner@example.com" {
+		t.Fatalf("legacy email = %q, want normalized email", repo.legacyEmail)
+	}
+	if repo.legacyPasswordHash != "bootstrap-password-hash" {
+		t.Fatalf("legacy password hash = %q, want hasher output", repo.legacyPasswordHash)
+	}
+	if repo.legacyPasswordHash == "correct horse battery staple" {
+		t.Fatal("repository received plaintext bootstrap password")
+	}
+}
+
 func testService(
 	repo Repository,
 	hasher PasswordHasher,
@@ -490,6 +527,15 @@ type stubRepository struct {
 	resetTokenHash    []byte
 	resetPasswordHash string
 	resetErr          error
+
+	legacyNeedsClaim   bool
+	legacyNeedsErr     error
+	legacyReady        bool
+	legacyReadyErr     error
+	legacyPrincipal    *Principal
+	legacyClaimErr     error
+	legacyEmail        string
+	legacyPasswordHash string
 }
 
 func (r *stubRepository) CreateRegistration(
@@ -588,4 +634,23 @@ func (r *stubRepository) ConsumePasswordReset(
 	r.resetTokenHash = tokenHash
 	r.resetPasswordHash = passwordHash
 	return r.resetErr
+}
+
+func (r *stubRepository) LegacyTenantNeedsClaim(context.Context) (bool, error) {
+	return r.legacyNeedsClaim, r.legacyNeedsErr
+}
+
+func (r *stubRepository) LegacyTenantReady(context.Context) (bool, error) {
+	return r.legacyReady, r.legacyReadyErr
+}
+
+func (r *stubRepository) ClaimLegacyTenant(
+	_ context.Context,
+	email string,
+	passwordHash string,
+	_ time.Time,
+) (*Principal, error) {
+	r.legacyEmail = email
+	r.legacyPasswordHash = passwordHash
+	return r.legacyPrincipal, r.legacyClaimErr
 }

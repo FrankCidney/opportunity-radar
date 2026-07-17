@@ -2,22 +2,32 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
 type Config struct {
-	Env                 string
-	Port                string
-	DatabaseURL         string
-	SchedulerEnabled    bool
-	SchedulerInterval   time.Duration
-	SchedulerRunOnStart bool
-	SchedulerRunTimeout time.Duration
-	ResendAPIKey        string
-	ResendFromEmail     string
-	ResendFromName      string
+	Env                    string
+	Port                   string
+	DatabaseURL            string
+	SchedulerEnabled       bool
+	SchedulerInterval      time.Duration
+	SchedulerRunOnStart    bool
+	SchedulerRunTimeout    time.Duration
+	ResendAPIKey           string
+	ResendFromEmail        string
+	ResendFromName         string
+	PublicBaseURL          string
+	RegistrationEnabled    bool
+	AuthCSRFKey            string
+	AuthSessionTTL         time.Duration
+	AuthVerificationTTL    time.Duration
+	AuthPasswordResetTTL   time.Duration
+	BootstrapAdminEmail    string
+	BootstrapAdminPassword string
 }
 
 func getEnv(key, fallback string) string {
@@ -106,16 +116,82 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
+	registrationEnabled, err := getEnvBool("REGISTRATION_ENABLED", true)
+	if err != nil {
+		return Config{}, err
+	}
+	authSessionTTL, err := getEnvDuration("AUTH_SESSION_TTL", 30*24*time.Hour)
+	if err != nil {
+		return Config{}, err
+	}
+	authVerificationTTL, err := getEnvDuration("AUTH_VERIFICATION_TTL", 24*time.Hour)
+	if err != nil {
+		return Config{}, err
+	}
+	authPasswordResetTTL, err := getEnvDuration("AUTH_PASSWORD_RESET_TTL", time.Hour)
+	if err != nil {
+		return Config{}, err
+	}
+
+	env := getEnv("ENV", "development")
+	port := getEnv("PORT", "8080")
+	publicBaseURL := strings.TrimRight(getEnv("PUBLIC_BASE_URL", ""), "/")
+	authCSRFKey := getEnv("AUTH_CSRF_KEY", "")
+	resendAPIKey := getEnv("RESEND_API_KEY", "")
+	resendFromEmail := getEnv("RESEND_FROM_EMAIL", "")
+	bootstrapEmail := getEnv("BOOTSTRAP_ADMIN_EMAIL", "")
+	bootstrapPassword := getEnv("BOOTSTRAP_ADMIN_PASSWORD", "")
+
+	isProduction := strings.EqualFold(env, "production")
+	if isProduction {
+		if len(authCSRFKey) < 32 {
+			return Config{}, fmt.Errorf("AUTH_CSRF_KEY must contain at least 32 bytes in production")
+		}
+		if err := validateProductionBaseURL(publicBaseURL); err != nil {
+			return Config{}, err
+		}
+		if registrationEnabled && (resendAPIKey == "" || resendFromEmail == "") {
+			return Config{}, fmt.Errorf("RESEND_API_KEY and RESEND_FROM_EMAIL are required when registration is enabled in production")
+		}
+	} else {
+		if authCSRFKey == "" {
+			authCSRFKey = "development-only-csrf-key-change-me"
+		}
+		if publicBaseURL == "" {
+			publicBaseURL = "http://localhost:" + port
+		}
+	}
+	if (bootstrapEmail == "") != (bootstrapPassword == "") {
+		return Config{}, fmt.Errorf("BOOTSTRAP_ADMIN_EMAIL and BOOTSTRAP_ADMIN_PASSWORD must be set together")
+	}
+
 	return Config{
-		Env:                 getEnv("ENV", "development"),
-		Port:                getEnv("PORT", "8080"),
-		DatabaseURL:         databaseURL,
-		SchedulerEnabled:    schedulerEnabled,
-		SchedulerInterval:   schedulerInterval,
-		SchedulerRunOnStart: schedulerRunOnStart,
-		SchedulerRunTimeout: schedulerRunTimeout,
-		ResendAPIKey:        getEnv("RESEND_API_KEY", ""),
-		ResendFromEmail:     getEnv("RESEND_FROM_EMAIL", ""),
-		ResendFromName:      getEnv("RESEND_FROM_NAME", ""),
+		Env:                    env,
+		Port:                   port,
+		DatabaseURL:            databaseURL,
+		SchedulerEnabled:       schedulerEnabled,
+		SchedulerInterval:      schedulerInterval,
+		SchedulerRunOnStart:    schedulerRunOnStart,
+		SchedulerRunTimeout:    schedulerRunTimeout,
+		ResendAPIKey:           resendAPIKey,
+		ResendFromEmail:        resendFromEmail,
+		ResendFromName:         getEnv("RESEND_FROM_NAME", ""),
+		PublicBaseURL:          publicBaseURL,
+		RegistrationEnabled:    registrationEnabled,
+		AuthCSRFKey:            authCSRFKey,
+		AuthSessionTTL:         authSessionTTL,
+		AuthVerificationTTL:    authVerificationTTL,
+		AuthPasswordResetTTL:   authPasswordResetTTL,
+		BootstrapAdminEmail:    bootstrapEmail,
+		BootstrapAdminPassword: bootstrapPassword,
 	}, nil
+}
+
+func validateProductionBaseURL(value string) error {
+	parsed, err := url.Parse(value)
+	if err != nil || parsed.Scheme != "https" || parsed.Host == "" ||
+		parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return fmt.Errorf("PUBLIC_BASE_URL must be an HTTPS origin without credentials, query, or fragment in production")
+	}
+	return nil
 }

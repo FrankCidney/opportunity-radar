@@ -394,6 +394,138 @@ func (r *PostgresRepository) ConsumePasswordReset(
 	return nil
 }
 
+func (r *PostgresRepository) LegacyTenantNeedsClaim(
+	ctx context.Context,
+) (bool, error) {
+	var needsClaim bool
+	err := r.db.QueryRowContext(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM tenants t
+			WHERE t.is_legacy = TRUE
+			  AND NOT EXISTS (
+				SELECT 1
+				FROM tenant_memberships m
+				WHERE m.tenant_id = t.id
+			  )
+		)
+	`).Scan(&needsClaim)
+	if err != nil {
+		return false, r.mapError("inspect legacy tenant claim", err)
+	}
+	return needsClaim, nil
+}
+
+func (r *PostgresRepository) LegacyTenantReady(
+	ctx context.Context,
+) (bool, error) {
+	var ready bool
+	err := r.db.QueryRowContext(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM tenants t
+			JOIN tenant_memberships m ON m.tenant_id = t.id
+			JOIN users u ON u.id = m.user_id
+			WHERE t.is_legacy = TRUE
+			  AND m.role = 'owner'
+			  AND u.email_verified_at IS NOT NULL
+			  AND u.disabled_at IS NULL
+		)
+	`).Scan(&ready)
+	if err != nil {
+		return false, r.mapError("inspect legacy tenant readiness", err)
+	}
+	return ready, nil
+}
+
+func (r *PostgresRepository) ClaimLegacyTenant(
+	ctx context.Context,
+	email string,
+	passwordHash string,
+	verifiedAt time.Time,
+) (*Principal, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, r.mapError("begin legacy tenant claim", err)
+	}
+	defer tx.Rollback()
+
+	var tenant Tenant
+	err = tx.QueryRowContext(ctx, `
+		SELECT id, name, is_legacy, created_at, updated_at
+		FROM tenants
+		WHERE is_legacy = TRUE
+		FOR UPDATE
+	`).Scan(
+		&tenant.ID,
+		&tenant.Name,
+		&tenant.IsLegacy,
+		&tenant.CreatedAt,
+		&tenant.UpdatedAt,
+	)
+	if err != nil {
+		return nil, r.mapError("load legacy tenant for claim", err)
+	}
+
+	var membershipExists bool
+	err = tx.QueryRowContext(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM tenant_memberships
+			WHERE tenant_id = $1
+		)
+	`, tenant.ID).Scan(&membershipExists)
+	if err != nil {
+		return nil, r.mapError("check legacy tenant membership", err)
+	}
+	if membershipExists {
+		return nil, ErrLegacyAlreadyClaimed
+	}
+
+	var user User
+	err = tx.QueryRowContext(ctx, `
+		INSERT INTO users (
+			email, password_hash, email_verified_at
+		)
+		VALUES ($1, $2, $3)
+		RETURNING id, email, email_verified_at, disabled_at, created_at, updated_at
+	`, email, passwordHash, verifiedAt).Scan(
+		&user.ID,
+		&user.Email,
+		&user.EmailVerifiedAt,
+		&user.DisabledAt,
+		&user.CreatedAt,
+		&user.UpdatedAt,
+	)
+	if err != nil {
+		return nil, r.mapError("create legacy owner", err)
+	}
+
+	var membership Membership
+	err = tx.QueryRowContext(ctx, `
+		INSERT INTO tenant_memberships (tenant_id, user_id, role)
+		VALUES ($1, $2, 'owner')
+		RETURNING tenant_id, user_id, role, created_at
+	`, tenant.ID, user.ID).Scan(
+		&membership.TenantID,
+		&membership.UserID,
+		&membership.Role,
+		&membership.CreatedAt,
+	)
+	if err != nil {
+		return nil, r.mapError("create legacy owner membership", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, r.mapError("commit legacy tenant claim", err)
+	}
+	return &Principal{
+		User:       user,
+		Tenant:     tenant,
+		Membership: membership,
+	}, nil
+}
+
 func (r *PostgresRepository) mapError(operation string, err error) error {
 	switch {
 	case errors.Is(err, sql.ErrNoRows):

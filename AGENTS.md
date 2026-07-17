@@ -14,7 +14,21 @@
   and external calls bounded by timeouts and platform limits.
 - Extend the existing server-rendered UI and shared CSS patterns. Keep new screens
   visually consistent, responsive, accessible, and usable with clear errors.
-- Update durable documentation when behavior, architecture, configuration,
-  operations, security assumptions, or user workflows change.
+- Treat documentation as part of implementation, not optional cleanup. Update it in
+  the same contained unit as the behavior it describes:
+  - `README.md` for setup, configuration, deployment, and first-use changes.
+  - `docs/ARCHITECTURE.md` for architecture that is actually implemented.
+  - `SECURITY.md` for authentication, authorization, secrets, privacy, security
+    assumptions, and vulnerability-reporting guidance.
+  - `docs/OPERATIONS.md` for migrations, backups/restores, workers, monitoring,
+    failure recovery, maintenance, and production runbooks.
+  - `docs/DATA_MODEL.md` for ownership, tables, invariants, lifecycle, retention,
+    export, and deletion behavior.
+  - `docs/USER_GUIDE.md` for durable user-facing workflows.
+  - `docs/adr/` for consequential decisions and their reasoning/tradeoffs.
+- Create a durable document when its subject first becomes real; do not document
+  planned behavior as implemented. Keep temporary implementation notes in
+  `docs/dev/`, and ensure completed work is reflected in the durable docs before a
+  phase is declared done.
 - Commit complete, passing units with conventional messages; preserve unrelated
   worktree changes.

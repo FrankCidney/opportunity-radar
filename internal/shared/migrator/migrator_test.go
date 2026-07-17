@@ -50,6 +50,47 @@ func TestLoadMigrationsSortsUpFilesOnly(t *testing.T) {
 	}
 }
 
+func TestIdentityMigrationUsesHashedTokensAndProtectedLegacyCreation(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(
+		"..", "..", "..", "migrations",
+		"20260718100000_add_identity_and_authentication.up.sql",
+	)
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read identity migration: %v", err)
+	}
+	sqlText := string(content)
+
+	required := []string{
+		"CREATE TABLE tenants",
+		"CREATE TABLE users",
+		"CREATE TABLE tenant_memberships",
+		"CREATE TABLE sessions",
+		"token_hash BYTEA NOT NULL UNIQUE",
+		"CREATE TABLE account_tokens",
+		"users_email_normalized",
+		"WHERE EXISTS (SELECT 1 FROM app_settings)",
+	}
+	for _, fragment := range required {
+		if !strings.Contains(sqlText, fragment) {
+			t.Errorf("identity migration missing %q", fragment)
+		}
+	}
+
+	forbidden := []string{
+		"password TEXT",
+		"token TEXT",
+		"INSERT INTO users",
+	}
+	for _, fragment := range forbidden {
+		if strings.Contains(sqlText, fragment) {
+			t.Errorf("identity migration contains unsafe fragment %q", fragment)
+		}
+	}
+}
+
 func TestApplyExecutesMigrationAndRecordsItInOneTransaction(t *testing.T) {
 	t.Parallel()
 
